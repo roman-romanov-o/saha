@@ -415,7 +415,7 @@ class ArtifactBundler:
                 out.append(
                     TestSpec(
                         name=path.stem,
-                        test_type=test_type,  # type: ignore[arg-type]
+                        test_type=test_type,
                         status=extract_status(body),
                         body=body,
                     )
