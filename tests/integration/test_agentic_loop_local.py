@@ -492,8 +492,10 @@ class TestAgenticLoopLocal:
 
         manager_prompt = manager_call.get("prompt", "")
         assert "{task_path}" not in manager_prompt
-        assert "docs/tasks/test-task/user-stories/" in manager_prompt
-        assert "docs/tasks/test-task/implementation-plan/" in manager_prompt
+        # Prompt now points the manager at the pre-bundled artifacts rather than
+        # literal task-folder paths.
+        assert "artifacts.user_stories" in manager_prompt
+        assert "artifacts.implementation_plan" in manager_prompt
 
     def test_fix_info_passed_on_failure(self, temp_project, state_manager):
         """Test that fix_info is passed to implementation agent on retry."""

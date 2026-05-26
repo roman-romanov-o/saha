@@ -46,6 +46,23 @@ class StepRecord(BaseModel):
     output_summary: str | None = None
 
 
+class PhaseTokenUsage(BaseModel):
+    """Token usage and timing for a single phase invocation in an iteration."""
+
+    phase: LoopPhase
+    agent_name: str
+    runner_name: str | None = None
+    started_at: datetime
+    completed_at: datetime
+    duration_seconds: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    cache_write_input_tokens: int = 0
+    reasoning_tokens: int = 0
+    total_tokens: int = 0
+
+
 class IterationRecord(BaseModel):
     """Record of a single loop iteration."""
 
@@ -60,6 +77,8 @@ class IterationRecord(BaseModel):
     # Progress tracking: files modified during this iteration
     files_changed: list[str] = Field(default_factory=list)
     files_added: list[str] = Field(default_factory=list)
+    # Per-phase token usage and timing for this iteration
+    token_usage: list[PhaseTokenUsage] = Field(default_factory=list)
 
 
 class ExecutionState(BaseModel):

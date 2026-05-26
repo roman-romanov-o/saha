@@ -1,3 +1,3 @@
 """Saha - LLM-agnostic agentic loop orchestrator for Sahaidachny."""
 
-__version__ = "0.8.2"
+__version__ = "0.11.0"

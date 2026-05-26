@@ -678,22 +678,70 @@ class ClaudeRunner(Runner):
         prompt: str,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Build the prompt with context for agent invocation."""
-        parts = [prompt]
+        """Build the prompt with context for agent invocation.
 
-        if context:
+        Layout (stable -> variable, for prompt-cache friendliness):
+
+            ## Static artifacts        ← bundled task content; byte-stable per task
+            ## Iteration state         ← per-iteration hot context (files_changed, fix_info, etc.)
+            ## Instructions            ← per-phase prompt (most variable, last)
+        """
+        if not context:
+            return prompt
+
+        artifacts = context.get("artifacts") if isinstance(context, dict) else None
+        if isinstance(artifacts, dict):
+            rest = {k: v for k, v in context.items() if k != "artifacts"}
+            return self._compose_with_bundled_artifacts(prompt, artifacts, rest)
+        return self._compose_legacy(prompt, context)
+
+    def _compose_with_bundled_artifacts(
+        self,
+        prompt: str,
+        artifacts: dict[str, Any],
+        iteration_state: dict[str, Any],
+    ) -> str:
+        parts: list[str] = [
+            "## Static artifacts",
+            "",
+            (
+                "Task artifacts are pre-bundled below by the orchestrator. "
+                "Treat them as the authoritative source of truth and do NOT re-read "
+                "the task folder unless the bundle is explicitly missing required content."
+            ),
+            "",
+            "```json",
+            json.dumps(artifacts, indent=2, default=str),
+            "```",
+        ]
+        if iteration_state:
             parts.extend(
                 [
                     "",
-                    "## Context",
+                    "## Iteration state",
                     "",
                     "```json",
-                    json.dumps(context, indent=2, default=str),
+                    json.dumps(iteration_state, indent=2, default=str),
                     "```",
                 ]
             )
-
+        parts.extend(["", "## Instructions", "", prompt])
         return "\n".join(parts)
+
+    def _compose_legacy(self, prompt: str, context: dict[str, Any]) -> str:
+        return "\n".join(
+            [
+                "## Context",
+                "",
+                "```json",
+                json.dumps(context, indent=2, default=str),
+                "```",
+                "",
+                "## Instructions",
+                "",
+                prompt,
+            ]
+        )
 
     def _try_parse_json(self, output: str) -> dict[str, Any] | None:
         """Try to extract JSON from output.

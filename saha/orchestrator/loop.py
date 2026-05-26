@@ -30,10 +30,11 @@ from saha.models.result import (
     SubagentResult,
     TestCritiqueResult,
 )
-from saha.models.state import ExecutionState, LoopPhase, StepStatus
+from saha.models.state import ExecutionState, LoopPhase, PhaseTokenUsage, StepStatus
+from saha.orchestrator.artifact_bundler import ArtifactBundler, ArtifactView
 from saha.orchestrator.plan_progress import PlanProgressUpdater
 from saha.orchestrator.state import StateManager
-from saha.runners.base import Runner
+from saha.runners.base import Runner, RunnerResult
 from saha.runners.registry import RunnerRegistry
 from saha.tools.registry import ToolRegistry
 
@@ -122,6 +123,36 @@ class AgenticLoop:
         self._hooks = hook_registry
         self._state_manager = state_manager
         self._settings = settings
+        self._bundler: ArtifactBundler | None = None
+
+    def _get_bundler(self, task_path: Path) -> ArtifactBundler:
+        """Get the artifact bundler, creating one for this task path if needed.
+
+        The bundler is cached per task_path so its mtime-keyed file cache
+        survives across phases of the same iteration (and across iterations).
+        """
+        if self._bundler is None or self._bundler.task_path != task_path:
+            self._bundler = ArtifactBundler(task_path)
+        return self._bundler
+
+    def _base_context(
+        self,
+        state: ExecutionState,
+        config: LoopConfig,
+        view: ArtifactView,
+    ) -> dict[str, Any]:
+        """Build the shared base context for any phase.
+
+        Bundles task artifacts (filtered by view + status) into the prompt
+        context so verifier subagents don't have to re-read the task folder.
+        """
+        artifacts = self._get_bundler(config.task_path).load(view)
+        return {
+            "task_id": config.task_id,
+            "task_path": str(config.task_path),
+            "iteration": state.current_iteration,
+            "artifacts": artifacts.model_dump(exclude_none=True, mode="json"),
+        }
 
     def _get_runner_for_agent(self, agent_name: str) -> Runner:
         """Get the appropriate runner for an agent.
@@ -137,6 +168,39 @@ class AgenticLoop:
         if self._runner_registry:
             return self._runner_registry.get_runner_for_agent(agent_name)
         return self._runner
+
+    def _record_phase_usage(
+        self,
+        state: ExecutionState,
+        phase: LoopPhase,
+        agent_name: str,
+        runner: Runner,
+        result: RunnerResult,
+        started_at: datetime,
+    ) -> None:
+        """Append per-phase token usage to the current iteration record."""
+        iteration = state.current_iteration_record
+        if iteration is None:
+            return
+
+        completed_at = datetime.now()
+        usage = result.token_usage or {}
+        iteration.token_usage.append(
+            PhaseTokenUsage(
+                phase=phase,
+                agent_name=agent_name,
+                runner_name=runner.get_name(),
+                started_at=started_at,
+                completed_at=completed_at,
+                duration_seconds=max(0.0, (completed_at - started_at).total_seconds()),
+                input_tokens=int(usage.get("input_tokens", 0) or 0),
+                output_tokens=int(usage.get("output_tokens", 0) or 0),
+                cache_read_input_tokens=int(usage.get("cache_read_input_tokens", 0) or 0),
+                cache_write_input_tokens=int(usage.get("cache_write_input_tokens", 0) or 0),
+                reasoning_tokens=int(usage.get("reasoning_tokens", 0) or 0),
+                total_tokens=int(usage.get("total_tokens") or result.tokens_used or 0),
+            )
+        )
 
     def _get_agent_path(self, agent_name: str) -> Path:
         """Get the path to an agent spec, considering variants.
@@ -542,18 +606,18 @@ class AgenticLoop:
         console.print(f"[cyan]→ Using runner: {runner.get_name()}[/cyan]")
 
         # Build context for the agent
-        context = {
-            "task_id": config.task_id,
-            "task_path": str(config.task_path),
-            "iteration": state.current_iteration,
-            "fix_info": state.context.get("fix_info"),
-        }
+        context = self._base_context(state, config, ArtifactView.IMPLEMENTER)
+        context["fix_info"] = state.context.get("fix_info")
 
         # Build the prompt
         prompt = self._build_implementation_prompt(state, config)
         log_agent_prompt("Implementation", prompt)
 
+        started_at = datetime.now()
         result = runner.run_agent(agent_path, prompt, context)
+        self._record_phase_usage(
+            state, LoopPhase.IMPLEMENTATION, agent_name, runner, result, started_at
+        )
         log_token_usage("Implementation", result.token_usage, result.tokens_used)
 
         if result.success:
@@ -649,18 +713,18 @@ class AgenticLoop:
             files_changed = impl_result.structured_output.get("files_changed", [])
             files_added = impl_result.structured_output.get("files_added", [])
 
-        context = {
-            "task_id": config.task_id,
-            "task_path": str(config.task_path),
-            "files_changed": files_changed,
-            "files_added": files_added,
-            "iteration": state.current_iteration,
-        }
+        context = self._base_context(state, config, ArtifactView.TEST_CRITIQUE)
+        context["files_changed"] = files_changed
+        context["files_added"] = files_added
 
         prompt = self._build_test_critique_prompt(state, config, files_changed + files_added)
         log_agent_prompt("Test Critique", prompt)
 
+        started_at = datetime.now()
         result = runner.run_agent(agent_path, prompt, context)
+        self._record_phase_usage(
+            state, LoopPhase.TEST_CRITIQUE, agent_name, runner, result, started_at
+        )
         log_token_usage("Test Critique", result.token_usage, result.tokens_used)
 
         if result.success and result.structured_output:
@@ -735,81 +799,48 @@ class AgenticLoop:
         files: list[str],
     ) -> str:
         """Build the prompt for the test critique agent."""
-        # Filter to only test files
         test_files = [f for f in files if "test" in f.lower() or f.endswith("_test.py")]
         prod_files = [f for f in files if f not in test_files]
 
         parts = [
-            f"Analyze test quality AND completeness for task: {config.task_id}",
-            f"Task path: {config.task_path}",
-            f"Iteration: {state.current_iteration}",
+            f"Analyze test quality AND completeness for task: {config.task_id} (iteration {state.current_iteration}).",
+            "",
+            "Task artifacts (user stories, code changes, test specs) are bundled in Static artifacts. "
+            "Use the bundle as authoritative — only Read the actual test source files in the project.",
             "",
         ]
 
         if test_files:
-            parts.append("Test files to analyze (from this iteration):")
-            for f in test_files:
-                parts.append(f"  - {f}")
+            parts.append("Test files to analyze:")
+            parts.extend(f"  - {f}" for f in test_files)
         else:
-            parts.append("No specific test files identified. Search for test files in the project.")
-
+            parts.append(
+                "No new test files this iteration — search the project for existing tests covering the changed code."
+            )
         if prod_files:
             parts.append("")
-            parts.append("Production files changed (from this iteration):")
-            for f in prod_files:
-                parts.append(f"  - {f}")
+            parts.append("Production files changed:")
+            parts.extend(f"  - {f}" for f in prod_files)
 
         parts.extend(
             [
                 "",
-                "## Phase 1: Completeness Check (MOST IMPORTANT)",
+                "## Phase 1: Completeness (most important)",
+                "Cross-reference acceptance criteria (artifacts.user_stories), planned interfaces "
+                "(artifacts.code_changes), and planned test specs (artifacts.test_specs) against the actual test "
+                "files. Report `uncovered_acceptance_criteria`, `uncovered_code_changes`, `missing_test_specs`. "
+                "Missing tests for significant ACs or code changes => critique_passed=false.",
                 "",
-                "Cross-reference these sources to find MISSING tests:",
-                "",
-                f"1. **User stories** at `{config.task_path}/user-stories/US-*.md`",
-                "   - Read acceptance criteria — every AC should have at least one test",
-                "",
-                f"2. **Code changes** at `{config.task_path}/code-changes/*.md`",
-                "   - Read what interfaces/classes/APIs were planned",
-                "   - Every new class/endpoint/interface should have test coverage",
-                "",
-                f"3. **Test specs** at `{config.task_path}/test-specs/`",
-                "   - Read planned E2E, integration, and unit test specs",
-                "   - Check which planned tests actually got implemented",
-                "",
-                "4. **Actual test files** in the project",
-                "   - Find all test files covering changed code",
-                "   - Map existing tests back to acceptance criteria and code changes",
-                "",
-                "Report:",
-                "- `uncovered_acceptance_criteria`: ACs with no test",
-                "- `uncovered_code_changes`: planned interfaces/classes with no test",
-                "- `missing_test_specs`: planned test specs not yet implemented",
-                "",
-                "**Missing tests = automatic failure.** If significant acceptance criteria "
-                "or code changes lack test coverage, set critique_passed=false.",
-                "",
-                "## Phase 2: Quality Check",
-                "",
-                "For existing tests, analyze:",
-                "- Over-mocking (>3 mocks per test)",
-                "- Mocking the System Under Test",
-                "- Placeholder tests (pass, ..., assert True)",
-                "- Assertions that only check mock calls, not outcomes",
-                "- E2E tests should exist for key user flows (E2E-first philosophy)",
+                "## Phase 2: Quality",
+                "Flag over-mocking (>3 mocks/test), mocking-the-SUT, placeholder tests, mock-only assertions, "
+                "and missing E2E coverage for key flows.",
                 "",
                 "## Scoring",
+                "6 dimensions: mocking, assertions, structure, coverage, completeness, independence. "
+                "Completeness is weighted highest. A/B = proceed; C/D/F = block QA.",
                 "",
-                "Score across 6 dimensions: mocking, assertions, structure, coverage, "
-                "completeness, independence.",
-                "**Completeness is now weighted highest** — tests that exist but don't cover "
-                "the plan are worse than no tests (false confidence).",
-                "",
-                "A/B = proceed, C/D/F = block QA",
-                "",
-                "Return JSON with critique_passed, test_quality_score, dimension_scores, "
-                "uncovered_acceptance_criteria, uncovered_code_changes, missing_test_specs, "
-                "and fix_info.",
+                "Return JSON: critique_passed, test_quality_score, dimension_scores, "
+                "uncovered_acceptance_criteria, uncovered_code_changes, missing_test_specs, fix_info.",
             ]
         )
 
@@ -854,18 +885,17 @@ class AgenticLoop:
         runner = self._get_runner_for_agent(agent_name)
         console.print(f"[cyan]→ Using runner: {runner.get_name()}[/cyan]")
 
-        context = {
-            "task_id": config.task_id,
-            "task_path": str(config.task_path),
-            "implementation_output": impl_result.output,
-            "verification_scripts": [str(s) for s in (config.verification_scripts or [])],
-            "playwright_enabled": config.playwright_enabled,
-        }
+        context = self._base_context(state, config, ArtifactView.QA)
+        context["implementation_output"] = impl_result.output
+        context["verification_scripts"] = [str(s) for s in (config.verification_scripts or [])]
+        context["playwright_enabled"] = config.playwright_enabled
 
         prompt = self._build_qa_prompt(state, config)
         log_agent_prompt("QA", prompt)
 
+        started_at = datetime.now()
         result = runner.run_agent(agent_path, prompt, context)
+        self._record_phase_usage(state, LoopPhase.QA, agent_name, runner, result, started_at)
         log_token_usage("QA Verification", result.token_usage, result.tokens_used)
 
         # Run pytest if enabled
@@ -960,19 +990,21 @@ class AgenticLoop:
         if not all_files:
             logger.warning("No files_changed info from implementation, will scan task path")
 
-        context = {
-            "task_id": config.task_id,
-            "task_path": str(config.task_path),
-            "files_changed": files_changed,
-            "files_added": files_added,
-            "iteration": state.current_iteration,
-            "enabled_tools": [t for t in state.enabled_tools if t in ("ruff", "ty", "complexity")],
-        }
+        context = self._base_context(state, config, ArtifactView.CODE_QUALITY)
+        context["files_changed"] = files_changed
+        context["files_added"] = files_added
+        context["enabled_tools"] = [
+            t for t in state.enabled_tools if t in ("ruff", "ty", "complexity")
+        ]
 
         prompt = self._build_code_quality_prompt(state, config, all_files)
         log_agent_prompt("Code Quality", prompt)
 
+        started_at = datetime.now()
         result = runner.run_agent(agent_path, prompt, context)
+        self._record_phase_usage(
+            state, LoopPhase.CODE_QUALITY, agent_name, runner, result, started_at
+        )
         log_token_usage("Code Quality", result.token_usage, result.tokens_used)
 
         if result.success and result.structured_output:
@@ -1045,32 +1077,21 @@ class AgenticLoop:
     ) -> str:
         """Build the prompt for the code quality agent."""
         parts = [
-            f"Analyze code quality for task: {config.task_id}",
-            f"Task path: {config.task_path}",
-            f"Iteration: {state.current_iteration}",
-            "",
+            f"Analyze code quality for task: {config.task_id} (iteration {state.current_iteration}).",
         ]
-
         if files:
             parts.append("Files to analyze:")
-            for f in files:
-                parts.append(f"  - {f}")
+            parts.extend(f"  - {f}" for f in files)
         else:
-            parts.append(
-                "No specific files provided. Analyze recent changes in the task directory."
-            )
-
+            parts.append("No file list provided — analyze recent changes in the task directory.")
         parts.extend(
             [
                 "",
-                "Run quality tools (ruff, ty, complexipy) on these files.",
-                "Filter false positives and pre-existing issues.",
+                "Run ruff, ty, complexipy on these files. Filter false positives and pre-existing issues. "
                 "Only fail for genuine problems in the changed code.",
-                "",
                 'Return JSON: {"quality_passed": true/false, "fix_info": "..." if failed}',
             ]
         )
-
         return "\n".join(parts)
 
     def _run_manager(
@@ -1133,7 +1154,9 @@ class AgenticLoop:
         prompt = self._build_manager_prompt(state, config)
         log_agent_prompt("Manager", prompt)
 
+        started_at = datetime.now()
         result = runner.run_agent(agent_path, prompt, context, timeout=timeout)
+        self._record_phase_usage(state, LoopPhase.MANAGER, agent_name, runner, result, started_at)
         log_token_usage("Manager", result.token_usage, result.tokens_used)
 
         if result.success:
@@ -1183,7 +1206,7 @@ class AgenticLoop:
             if not implementation_summary and impl_result.output:
                 implementation_summary = impl_result.output[:1200]
 
-        artifacts: dict[str, Any] = {
+        iteration_artifacts: dict[str, Any] = {
             "files_changed": files_changed,
             "files_added": files_added,
             "implementation_summary": implementation_summary,
@@ -1197,19 +1220,16 @@ class AgenticLoop:
             ),
         }
         if impl_result and impl_result.structured_output:
-            artifacts["implementation_structured_output"] = impl_result.structured_output
+            iteration_artifacts["implementation_structured_output"] = impl_result.structured_output
 
-        return {
-            "task_id": config.task_id,
-            "task_path": str(config.task_path),
-            "iteration": state.current_iteration,
-            "current_plan_phase": state.context.get("current_plan_phase"),
-            "iteration_stop": {
-                "stopped_at_phase": stopped_at_phase.value if stopped_at_phase else None,
-                "reason": stop_reason,
-            },
-            "iteration_artifacts": artifacts,
+        context = self._base_context(state, config, ArtifactView.MANAGER)
+        context["current_plan_phase"] = state.context.get("current_plan_phase")
+        context["iteration_stop"] = {
+            "stopped_at_phase": stopped_at_phase.value if stopped_at_phase else None,
+            "reason": stop_reason,
         }
+        context["iteration_artifacts"] = iteration_artifacts
+        return context
 
     def _run_dod_check(
         self,
@@ -1255,16 +1275,15 @@ class AgenticLoop:
             # Don't auto-complete - this is a configuration error
             return False
 
-        context = {
-            "task_id": config.task_id,
-            "task_path": str(config.task_path),
-            "iterations_completed": state.current_iteration,
-        }
+        context = self._base_context(state, config, ArtifactView.DOD)
+        context["iterations_completed"] = state.current_iteration
 
         prompt = self._build_dod_prompt(state, config)
         log_agent_prompt("DoD", prompt)
 
+        started_at = datetime.now()
         result = runner.run_agent(agent_path, prompt, context)
+        self._record_phase_usage(state, LoopPhase.DOD_CHECK, agent_name, runner, result, started_at)
         log_token_usage("DoD Check", result.token_usage, result.tokens_used)
 
         if result.success and result.structured_output:
@@ -1336,31 +1355,17 @@ class AgenticLoop:
         state: ExecutionState,
         config: LoopConfig,
     ) -> str:
-        """Build the prompt for the implementation agent.
-
-        Provides TDD-focused context to guide the agent through:
-        1. Interface definition (from code changes)
-        2. Test writing (from test specs) - RED
-        3. Implementation - GREEN
-        """
+        """Build the prompt for the implementation agent."""
         parts = [
-            f"Implement task: {config.task_id}",
-            f"Task path: {config.task_path}",
-            f"Iteration: {state.current_iteration}",
-            "",
+            f"Implement task: {config.task_id} (iteration {state.current_iteration}).",
         ]
 
         current_phase = state.context.get("current_plan_phase")
         if current_phase:
-            parts.extend(
-                [
-                    f"Current plan phase: {current_phase}",
-                    "",
-                ]
-            )
+            parts.append(f"Current plan phase: {current_phase}")
+        parts.append("")
 
         if state.context.get("fix_info"):
-            # Retry iteration - focus on fixing specific issues
             parts.extend(
                 [
                     "## Fix Mode",
@@ -1373,33 +1378,18 @@ class AgenticLoop:
                 ]
             )
         else:
-            # First iteration - full TDD cycle
             parts.extend(
                 [
-                    "## TDD Development Cycle",
+                    "## TDD Cycle",
                     "",
-                    "Follow the TDD approach:",
+                    "Task artifacts (user stories, code changes, test specs, plan phases) are bundled in "
+                    "Static artifacts — use them directly, don't re-read the task folder.",
                     "",
-                    "### Phase 1: Interfaces",
-                    f"- Read code changes at `{config.task_path}/code-changes/`",
-                    "- Create Pydantic models and Protocol classes for the contracts",
-                    "",
-                    "### Phase 2: Tests (Red)",
-                    f"- Read test specs at `{config.task_path}/test-specs/`",
-                    "- Write pytest tests based on the specs",
-                    "- Tests WILL fail initially (this is expected)",
-                    "",
-                    "### Phase 3: Implementation (Green)",
-                    "- Implement code to make all tests pass",
-                    "- Run tests after implementation to verify",
-                    "",
-                    "Read the task artifacts and follow TDD strictly.",
+                    "1. **Interfaces** — from `artifacts.code_changes`, create Pydantic models and Protocol classes.",
+                    "2. **Tests (Red)** — from `artifacts.test_specs`, write pytest tests; expect them to fail.",
+                    "3. **Implementation (Green)** — make the tests pass, then run them to verify.",
                 ]
             )
-
-        # NOTE: File changes are automatically extracted by the runner
-        # (Claude tool metadata or filesystem diff), so we don't ask the LLM
-        # to self-report them.
 
         return "\n".join(parts)
 
@@ -1410,22 +1400,14 @@ class AgenticLoop:
     ) -> str:
         """Build the prompt for the QA agent."""
         parts = [
-            f"Verify the implementation for task: {config.task_id}",
-            f"Task path: {config.task_path}",
+            f"Verify the implementation for task: {config.task_id} (iteration {state.current_iteration}).",
             "",
-            "Check that:",
-            "1. The implementation matches the task requirements",
-            "2. All acceptance criteria are met",
-            "3. Tests pass (if applicable)",
+            "Acceptance criteria are bundled under `artifacts.user_stories` — verify against them directly.",
+            "Check that the implementation matches the requirements, all ACs are met, and tests pass.",
         ]
-
         if config.verification_scripts:
-            parts.append(f"\nRun verification scripts: {config.verification_scripts}")
-
-        parts.append(
-            '\nReturn a JSON with: {"dod_achieved": true/false, "fix_info": "..." if not achieved}'
-        )
-
+            parts.append(f"Run verification scripts: {config.verification_scripts}")
+        parts.append('Return JSON: {"dod_achieved": true/false, "fix_info": "..." if not achieved}')
         return "\n".join(parts)
 
     def _build_manager_prompt(
@@ -1435,54 +1417,41 @@ class AgenticLoop:
     ) -> str:
         """Build the prompt for the manager agent."""
         parts = [
-            f"Update task artifacts after iteration {state.current_iteration} for: {config.task_id}",
-            f"Task path: {config.task_path}",
-            "",
+            f"Update task artifacts after iteration {state.current_iteration} for: {config.task_id}.",
         ]
-
         current_phase = state.context.get("current_plan_phase")
         if current_phase:
-            parts.extend(
-                [
-                    f"Current plan phase: {current_phase}",
-                    "",
-                ]
-            )
+            parts.append(f"Current plan phase: {current_phase}")
+        parts.append("")
 
         iteration = state.current_iteration_record
         files_touched: list[str] = []
         if iteration:
             files_touched = sorted(set(iteration.files_changed + iteration.files_added))
-
         if files_touched:
             parts.append("Files changed this iteration (from runner metadata):")
-            for file_path in files_touched[:25]:
-                parts.append(f"  - {file_path}")
+            parts.extend(f"  - {p}" for p in files_touched[:25])
             if len(files_touched) > 25:
                 parts.append(f"  - ... and {len(files_touched) - 25} more")
             parts.append("")
 
         parts.extend(
             [
-                "Your job:",
-                f"1. Read the user stories at {config.task_path}/user-stories/",
-                f"2. Read the implementation plan at {config.task_path}/implementation-plan/",
-                "3. Based on what was implemented this iteration, update:",
-                "   - Mark completed acceptance criteria with [x]",
-                "   - Update user story status if all criteria are met",
-                "   - Mark completed phases in the implementation plan",
+                "User stories and plan phases are bundled in `artifacts.user_stories` and "
+                "`artifacts.implementation_plan` (Done items as stubs, active items full). "
+                "Use the bundle as the source of truth and Edit the matching files on disk to:",
+                "- check off newly completed acceptance criteria with [x]",
+                "- update story Status when all its ACs are met",
+                "- mark completed plan phases",
                 "",
-                "Use the Context JSON as primary evidence for this iteration.",
-                "If evidence is incomplete, inspect repository files/diff directly and stay conservative.",
-                "If Context.iteration_stop.stopped_at_phase is set, this iteration ended early.",
-                "For early-stop iterations, update progress notes conservatively and avoid over-marking completion.",
-                "Do not ask the user for additional context in your output.",
-                "Only mark items as done that are actually implemented.",
-                "Be conservative - if unsure, leave it as pending.",
+                "Use `iteration_artifacts` as the primary evidence. If `iteration_stop.stopped_at_phase` "
+                "is set, this iteration ended early — update notes conservatively.",
+                "Only mark items as done that are actually implemented. When unsure, leave as pending. "
                 "Use status='partial' only when a file update was attempted but failed.",
                 "",
-                "Return JSON with this exact shape:",
-                '{"status":"success","updates_made":[{"file":"...","change":"...","verified":true}],"items_completed":["..."],"items_remaining":["..."],"failed_updates":[],"notes":"..."}',
+                "Return JSON: ",
+                '{"status":"success","updates_made":[{"file":"...","change":"...","verified":true}],'
+                '"items_completed":["..."],"items_remaining":["..."],"failed_updates":[],"notes":"..."}',
             ]
         )
 
@@ -1495,30 +1464,21 @@ class AgenticLoop:
     ) -> str:
         """Build the prompt for the DoD agent."""
         parts = [
-            f"Verify if task is COMPLETE: {config.task_id}",
-            f"Task path: {config.task_path}",
-            f"Iterations completed: {state.current_iteration}",
+            f"Verify if task is COMPLETE: {config.task_id} (iterations completed: {state.current_iteration}).",
             "",
-            "CRITICAL: You must actually read and verify the task artifacts.",
-            "",
-            "Steps:",
-            "1. Read task-description.md for the overall goals",
-            "2. Read ALL user stories in user-stories/",
-            "   - Count total acceptance criteria",
-            "   - Count how many are marked [x] done",
-            "3. Read implementation-plan/ phases",
-            "   - Check if all phases are marked complete",
+            "All task artifacts are bundled in Static artifacts (full bodies for the DoD view). "
+            "Verify directly against the bundle — do not re-read the task folder.",
             "",
             "Task is COMPLETE only if:",
             "- ALL user stories have status 'Done'",
             "- ALL acceptance criteria are checked [x]",
             "- ALL implementation phases are complete",
             "",
-            "Task is NOT complete if ANY work remains.",
+            "If the bundle has `truncated: true`, fall back to reading the specifically "
+            "stubbed files listed in `truncation_notes`.",
             "",
             'Return JSON: {"task_complete": true/false, "remaining_items": [...], "reasoning": "..."}',
         ]
-
         return "\n".join(parts)
 
 

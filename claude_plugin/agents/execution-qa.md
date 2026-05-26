@@ -33,13 +33,21 @@ Your job is to:
 2. **Check acceptance criteria** against actual implementation
 3. **Verify integration** works correctly
 
+## Pre-bundled Task Artifacts
+
+`task_description`, `user_stories`, `test_specs`, `code_changes`, `api_contracts` are
+pre-loaded under `## Static artifacts → artifacts.*`. **Use the bundle as the source
+of truth — do NOT `Read`/`Glob` the task folder for these.** Stories with `body: null`
+are stubs (Done/Draft/skipped); only id, title, and status are present. Re-read only
+items listed in `truncation_notes` if `truncated: true`.
+
 ## Verification Process
 
 1. **Gather Requirements**
-   - Read the task description at `{task_path}/task-description.md`
-   - Review user stories for acceptance criteria
-   - Check test specifications at `{task_path}/test-specs/`
-   - Note any specific DoD items in the implementation plan
+   - Read `artifacts.task_description` from the bundle.
+   - Use `artifacts.user_stories` (active items have full body with acceptance criteria).
+   - Use `artifacts.test_specs` for planned test cases.
+   - Note DoD items in `artifacts.implementation_plan`.
 
 2. **Build Verification Checklist**
    - Extract all acceptance criteria from user stories
