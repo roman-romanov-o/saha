@@ -35,14 +35,22 @@ Your job is to:
 3. **Verify UI behavior** with Playwright
 4. **Capture evidence** via screenshots
 
+## Pre-bundled Task Artifacts
+
+`task_description`, `user_stories`, `test_specs`, `code_changes`, `api_contracts` are
+pre-loaded under `## Static artifacts → artifacts.*`. **Use the bundle as the source
+of truth — do NOT `Read`/`Glob` the task folder for these.** Stories with `body: null`
+are stubs (Done/Draft/skipped). Re-read only items listed in `truncation_notes` if
+`truncated: true`.
+
 ## Verification Process
 
 1. **Gather Requirements**
-   - Read the task description at `{task_path}/task-description.md`
-   - Review user stories for acceptance criteria
-   - Check test specifications at `{task_path}/test-specs/`
-   - Note any specific DoD items in the implementation plan
-   - Identify UI flows that need browser verification
+   - Read `artifacts.task_description` from the bundle.
+   - Use `artifacts.user_stories` for acceptance criteria.
+   - Use `artifacts.test_specs` for planned test cases.
+   - Note DoD items in `artifacts.implementation_plan`.
+   - Identify UI flows that need browser verification.
 
 2. **Build Verification Checklist**
    - Extract all acceptance criteria from user stories

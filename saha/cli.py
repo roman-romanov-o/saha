@@ -9,6 +9,7 @@ import typer
 
 from saha.commands.execution import register_execution_commands
 from saha.commands.plugin import register_plugin_commands
+from saha.commands.stats import register_stats_command
 
 app = typer.Typer(
     name="saha",
@@ -19,6 +20,7 @@ app = typer.Typer(
 # Register command groups
 register_execution_commands(app)
 register_plugin_commands(app)
+register_stats_command(app)
 
 
 def main() -> None:

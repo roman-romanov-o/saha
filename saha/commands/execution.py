@@ -172,7 +172,7 @@ def _spawn_background_execution(task_id: str, scheduled_at: datetime) -> None:
         f"log = open({str(log_file)!r}, 'a'); "
         f"log.write('\\n--- Starting scheduled execution at ' + time.ctime() + ' ---\\n'); "
         f"log.flush(); "
-        f"subprocess.run({saha_cmd!r}, stdout=log, stderr=log, check=False)"
+        f"subprocess.run({saha_cmd!r}, stdout=log, stderr=log, check=False)",
     ]
 
     # Start detached background process
@@ -352,6 +352,19 @@ def _resolve_and_validate_task_path(
 
 def _display_run_info(task_id: str, task_path: Path, max_iterations: int) -> None:
     """Display run command startup information."""
+    typer.echo(
+        typer.style(
+            "Note: `saha run` shells out to `claude -p` and is billed against API credits, "
+            "not your Claude subscription.",
+            fg=typer.colors.YELLOW,
+        )
+    )
+    typer.echo(
+        typer.style(
+            "  For subscription-billed execution, run `/saha:execute` inside Claude Code instead.",
+            fg=typer.colors.YELLOW,
+        )
+    )
     typer.echo(f"Starting agentic loop for task: {task_id}")
     typer.echo(f"Task path: {task_path}")
     typer.echo(f"Max iterations: {max_iterations}")
@@ -406,6 +419,13 @@ def _resume_command(task_id: str, verbose: bool) -> None:
     settings = Settings(verbose=verbose)
     orchestrator = create_orchestrator(settings)
 
+    typer.echo(
+        typer.style(
+            "Note: `saha resume` uses `claude -p` (API-billed). "
+            "For subscription billing, use `/saha:resume` inside Claude Code.",
+            fg=typer.colors.YELLOW,
+        )
+    )
     typer.echo(f"Resuming task: {task_id}")
 
     try:

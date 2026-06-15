@@ -33,17 +33,27 @@ The most dangerous scenario is **thinking you're done when you're not**:
 - Acceptance criteria without tests can't be marked as "Done"
 - Tests that exist but don't cover the plan give false confidence about readiness
 
+## Pre-bundled Task Artifacts
+
+The plan artifacts you need (`user_stories`, `code_changes`, `test_specs`) are
+pre-loaded under `## Static artifacts → artifacts.*` in your context. **Read them
+directly from the bundle — do NOT `Read`/`Glob` the task folder for these.** Only
+re-read source files in the project for the actual test code (the bundle does not
+contain those). If the bundle reports `truncated: true`, re-read only the items
+listed in `truncation_notes`.
+
 ## Starting Instructions
 
 **Follow this sequence:**
 
-1. **Read the plan artifacts** (user stories, code changes, test specs)
-2. **Find all test files** in the project
-3. **Cross-reference**: map tests to acceptance criteria and code changes
+1. **Read `artifacts.user_stories`, `artifacts.code_changes`, `artifacts.test_specs`** from
+   the bundled context (NOT from the task folder).
+2. **Find all test files** in the project (these live in source, not in the bundle).
+3. **Cross-reference**: map tests to acceptance criteria and code changes.
 4. **Identify gaps**: what's planned but not tested?
-5. **Analyze quality** of existing tests across 6 dimensions
-6. **Score and report** with completeness as the primary factor
-7. **Block if C/D/F** with detailed fix instructions
+5. **Analyze quality** of existing tests across 6 dimensions.
+6. **Score and report** with completeness as the primary factor.
+7. **Block if C/D/F** with detailed fix instructions.
 
 ## Six Quality Dimensions
 
@@ -54,20 +64,20 @@ The most dangerous scenario is **thinking you're done when you're not**:
 
 **Analysis Steps:**
 
-1. **Read user stories** (`{task_path}/user-stories/US-*.md`)
-   - Extract every acceptance criterion (AC)
-   - For each AC, search test files for a test that covers it
-   - Report uncovered ACs
+1. **From `artifacts.user_stories`**
+   - Extract every acceptance criterion (AC) from the stories that have a body.
+   - For each AC, search test files in the project for a test that covers it.
+   - Report uncovered ACs.
 
-2. **Read code changes** (`{task_path}/code-changes/*.md`)
-   - Extract every new/modified class, interface, endpoint
-   - For each, find tests that exercise it
-   - Report untested code changes
+2. **From `artifacts.code_changes`**
+   - Extract every new/modified class, interface, endpoint from items with a body.
+   - For each, find tests that exercise it.
+   - Report untested code changes.
 
-3. **Read test specs** (`{task_path}/test-specs/`)
-   - List every planned test case (TC-E2E-XXX, TC-INT-XXX, TC-UNIT-XXX)
-   - Match to actual test implementations
-   - Report unimplemented test specs
+3. **From `artifacts.test_specs`**
+   - List every planned test case (TC-E2E-XXX, TC-INT-XXX, TC-UNIT-XXX) from specs with a body.
+   - Match to actual test implementations in the project.
+   - Report unimplemented test specs.
 
 4. **Check E2E coverage** (E2E-first philosophy)
    - Every user story should have at least one E2E test
@@ -273,30 +283,28 @@ def test_cache_stores_value(empty_cache):
 
 This is a cross-referencing exercise across multiple artifacts:
 
-#### 1a. Read User Stories → Extract Acceptance Criteria
+#### 1a. From `artifacts.user_stories` → Extract Acceptance Criteria
 
 ```
-Read {task_path}/user-stories/US-*.md
-For each story, extract:
+For each story in artifacts.user_stories with a non-null body, extract:
   - Story ID and title
   - Each acceptance criterion (AC-1, AC-2, etc.)
   - Each edge case
 ```
 
-#### 1b. Read Code Changes → Extract Interfaces
+#### 1b. From `artifacts.code_changes` → Extract Interfaces
 
 ```
-Read {task_path}/code-changes/*.md
-For each code change, extract:
+For each code change in artifacts.code_changes with a non-null body, extract:
   - New classes/models
   - Modified interfaces/signatures
   - New endpoints
 ```
 
-#### 1c. Read Test Specs → Extract Planned Tests
+#### 1c. From `artifacts.test_specs` → Extract Planned Tests
 
 ```
-Read {task_path}/test-specs/**/*.md (excluding READMEs)
+For each spec in artifacts.test_specs with a non-null body (excluding READMEs):
 For each test spec, extract:
   - Test case IDs (TC-E2E-XXX, TC-INT-XXX, TC-UNIT-XXX)
   - What they're supposed to test

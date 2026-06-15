@@ -22,13 +22,18 @@ PLANNING COMMANDS (in Claude Code):
   /saha:plan           Generate execution plan
   /saha:status         Check planning progress
 
-EXECUTION COMMANDS (in terminal):
+EXECUTION COMMANDS (in Claude Code — subscription-billed):
+
+  /saha:execute [task-id]     Run agentic loop in this session
+  /saha:resume  [task-id]     Resume interrupted task in this session
+
+EXECUTION COMMANDS (in terminal — uses API credits):
 
   saha use <task-id>          Set current task context
   saha use                    Show current task
   saha use --clear            Clear current task
-  saha run [task-id]          Run agentic execution loop
-  saha resume [task-id]       Resume interrupted task
+  saha run [task-id]          Run agentic loop (API-billed, headless)
+  saha resume [task-id]       Resume task (API-billed, headless)
   saha status [task-id]       Check execution status
   saha clean [task-id]        Clean execution state
 
@@ -40,7 +45,7 @@ WORKFLOW:
   4. /saha:stories
   5. /saha:verify stories
   6. /saha:plan
-  7. saha run                     (uses current task)
+  7. /saha:execute                (subscription) — or `saha run` for API
 
 MODES:
 
