@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-16
+
+### Added
+- **`/saha:quick "<task>"` lightweight planning**: a single inline pass that does a light, targeted codebase scan and writes the *minimum* artifact set the execution loop needs — a short `task-description.md`, one `user-stories/US-001.md` whose acceptance criteria are the Definition of Done, and one `implementation-plan/phase-01.md` — then hands off to `/saha:execute`. It is plan-only (no code, no execution) and runs **no** `planning_reviewer` gate, collapsing the full `init → task → research → stories → verify → plan` chain for small (1–2 file) changes while keeping the execution verify loop intact.
+  - Mirrored across `claude_plugin/` and the `.claude` runner; plugin bumped to `0.4.0` to surface the new command in `/saha:` help.
+- Docs: a short-task quick start (`/saha:quick` → `/saha:execute`) and a "Planning Paths" section that separates **scope** (small vs large) from **context** (greenfield vs existing).
+
+### Removed
+- **`--mode=minimal`** end-to-end: removed from `init_task.sh`, `help.sh`, the `saha`/`init`/`status`/`contracts`/`decide`/`verify` command docs, the `task-structure` skill (including the phantom "Definition of Done" planning step that mapped to no command), and the user guide. Existing task folders scaffolded under the old mode continue to work with the execution loop. The unrelated `verify --mode=manual|playwright|script|test` method flag is unchanged.
+
+### Fixed
+- Pruned three stale `# type: ignore[no-untyped-def]` comments in `artifact_bundler.py` that `ty` flagged as unused.
+
 ## [0.9.0] - 2026-05-26
 
 ### Added
