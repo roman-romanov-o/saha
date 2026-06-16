@@ -21,9 +21,6 @@ Document architectural decisions and their rationale (ADR format).
 
 - Task folder must exist
 - User stories should be defined (for context)
-- Only available in **full mode** (check README.md for mode)
-
-Check mode in `{task_path}/README.md`. If minimal mode, inform user this step is skipped.
 
 ## Execution
 

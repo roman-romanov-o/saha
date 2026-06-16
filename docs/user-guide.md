@@ -231,11 +231,36 @@ You should see `/saha:init`, `/saha:status`, and other commands listed.
 
 **Tip:** Run `/sahaidachny` in Claude Code to see all available commands at any time.
 
+### Small task? Use the one-command quick path
+
+For a **small change** (a 1-2 file fix, a tiny feature), skip the multi-step
+planning chain entirely:
+
+```bash
+# In Claude Code, run:
+/saha:quick "add a --json flag to the status output"
+
+# Then run the execution loop:
+/saha:execute            # subscription-billed, in Claude Code
+# or
+saha run <task-id>       # API-billed, in a terminal
+```
+
+`/saha:quick` does a light codebase scan, writes the minimum artifacts the
+execution loop needs (a short task description, one user story whose acceptance
+criteria are the definition of done, and one implementation phase), sets it as the
+current task, and stops. It does **not** run code or the loop — you run
+`/saha:execute` next. The full verify loop (test critique → QA → code-quality →
+DoD) runs unchanged. See [Planning Paths](#planning-paths) for when to use this
+vs. the full flow.
+
+For a **large** task, use the full planning flow below.
+
 ### 1. Initialize a New Task
 
 ```bash
 # In Claude Code, run:
-/saha:init user-authentication --mode=full
+/saha:init user-authentication
 ```
 
 This creates a task folder at `docs/tasks/task-01-user-authentication/`.
@@ -279,36 +304,50 @@ saha status task-01 --verbose
 
 The Planning Phase is where you define **what** to build before the autonomous execution begins. Good planning leads to better execution.
 
-### Planning Modes
+<a name="planning-paths"></a>
+### Planning Paths
 
-Sahaidachny supports two planning modes based on your needs:
+Two **independent** things decide how much planning a task needs. Keep them
+separate:
 
-#### Minimal Mode (Greenfield Projects)
+- **Scope** — *small* (a 1-2 file fix, a tiny feature) vs. *large*
+  (multi-component, public-API, integration-heavy).
+- **Context** — *greenfield* (a new area, little existing code) vs. *existing
+  codebase* (patterns and architecture matter).
 
-For new projects or throwaway prototypes where codebase context isn't critical:
+It's **scope** that picks your path, not context. The codebase scan adapts to
+context automatically: in an existing codebase it grounds the plan in real files;
+in a greenfield area it proceeds from your description without inventing
+references.
+
+| | Small scope | Large scope |
+|---|---|---|
+| **Greenfield** | `/saha:quick` | full planning flow |
+| **Existing codebase** | `/saha:quick` | full planning flow |
+
+Both paths feed the **same** execution loop and the same verification gates. They
+differ only in how the planning artifacts are authored.
+
+#### Quick Path (small tasks)
+
+One command, one pass, no separate review-and-approve gate:
 
 ```
-Create Task Description (user input)
+/saha:quick "<one-line task>"
+    ↓  (light codebase scan + writes minimum artifacts, in one pass)
+task-description.md + user-stories/US-001.md (acceptance criteria = definition of
+done) + implementation-plan/phase-01.md
     ↓
-Create User Stories (auto-generated)
-    ↓
-Verify User Stories (user approval)
-    ↓
-Create Definition of Done (auto-generated)
-    ↓
-Verify DoD (user approval)
-    ↓
-Ready for Execution
+/saha:execute   (full verify loop runs unchanged)
 ```
 
 **Use when:**
-- Starting from scratch
-- Building a prototype
-- Simple features without existing constraints
+- The change is small (roughly 1-2 files)
+- You want the verify loop without the planning ceremony
 
-#### Full Mode (Production Codebases)
+#### Full Path (large tasks)
 
-For existing codebases where patterns and architecture matter:
+For multi-component work where patterns, contracts, and integration matter:
 
 ```
 Create Task Description (user input)
@@ -339,7 +378,6 @@ Ready for Execution
 ```
 
 **Use when:**
-- Working in an existing codebase
 - Features that touch multiple components
 - Changes that affect public APIs
 - Features requiring integration tests
@@ -350,6 +388,7 @@ All planning commands are Claude Code slash commands prefixed with `/saha:`.
 
 | Command | Purpose | Output |
 |---------|---------|--------|
+| `/saha:quick` | One-pass plan for a small task | `task-description.md`, `user-stories/US-001.md`, `implementation-plan/phase-01.md` |
 | `/saha:init` | Scaffold task folder structure | `task-XX/` directory tree |
 | `/saha:research` | Deep codebase exploration | `research/*.md` documents |
 | `/saha:task` | Interactive task description | `task-description.md`, `README.md` |
@@ -363,23 +402,47 @@ All planning commands are Claude Code slash commands prefixed with `/saha:`.
 
 #### Command Details
 
-##### `/saha:init`
+##### `/saha:quick`
 
-Creates the initial folder structure for a new task.
+One-pass planning for a **small** task. Does a light, targeted codebase scan,
+scaffolds the task folder, sets it as the current task, and writes the minimum
+artifacts the execution loop needs — all in a single invocation with no separate
+review-and-approve step. It is plan-only: it stops and tells you to run
+`/saha:execute`.
 
 ```bash
-/saha:init <task-name> [--mode=full|minimal] [--path=docs/tasks]
+/saha:quick "<one-line task>" [--path=docs/tasks]
+```
+
+**Arguments:**
+- task description (required): a one-line description of the small change
+- `--path`: Base path for tasks (default: `docs/tasks`)
+
+**Examples:**
+```bash
+/saha:quick "add a --json flag to saha status output"
+/saha:quick "fix the off-by-one in pagination in api/list.py"
+```
+
+If you give no description, it asks for one and creates nothing. If the description
+looks large, it still produces a single collapsed plan but notes that the full
+planning flow may fit better.
+
+##### `/saha:init`
+
+Creates the initial folder structure for a new task (full planning flow).
+
+```bash
+/saha:init <task-name> [--path=docs/tasks]
 ```
 
 **Arguments:**
 - `task-name` (required): Short descriptive name for the task
-- `--mode`: Planning mode (default: `full`)
 - `--path`: Base path for tasks (default: `docs/tasks`)
 
 **Examples:**
 ```bash
 /saha:init user-authentication
-/saha:init payment-integration --mode=minimal
 /saha:init api-refactor --path=planning/tasks
 ```
 
@@ -1378,7 +1441,8 @@ saha clean --all
 
 ```
 /sahaidachny                   # Show all commands and current status (helper)
-/saha:init <name> [--mode=full|minimal] [--path=docs/tasks]
+/saha:quick "<one-line task>" [--path=docs/tasks]   # small-task one-pass plan
+/saha:init <name> [--path=docs/tasks]
 /saha:research [topic]
 /saha:task
 /saha:stories

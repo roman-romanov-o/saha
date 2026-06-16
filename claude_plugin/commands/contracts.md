@@ -21,9 +21,6 @@ Define interfaces, API endpoints, and data contracts.
 
 - Task folder must exist
 - User stories and design decisions should be defined
-- Only available in **full mode**
-
-Check mode in `{task_path}/README.md`. If minimal mode, inform user this step is skipped.
 
 ## Execution
 

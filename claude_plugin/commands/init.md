@@ -1,6 +1,6 @@
 ---
 description: Initialize a new Sahaidachny task folder structure
-argument-hint: <task-name> [--mode=full|minimal] [--path=docs/tasks]
+argument-hint: <task-name> [--path=docs/tasks]
 allowed-tools: Bash
 ---
 
@@ -8,10 +8,12 @@ allowed-tools: Bash
 
 Create a new hierarchical task structure for planning.
 
+> For a **small** change (1-2 files), use `/saha:quick "<one-line task>"` instead —
+> it plans in one pass and hands straight off to `/saha:execute`.
+
 ## Arguments
 
 - First argument: **Task name** (required) - Short descriptive name
-- `--mode=full|minimal`: Planning mode (default: full)
 - `--path=<path>`: Base path for tasks (default: docs/tasks)
 
 ## Execution
@@ -43,7 +45,6 @@ This creates:
 
 ```
 /saha:init user-authentication
-/saha:init payment-integration --mode=minimal
 /saha:init api-refactor --path=planning/tasks
 ```
 

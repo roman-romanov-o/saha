@@ -9,7 +9,11 @@ Output the following help information to the user:
                      SAHAIDACHNY COMMANDS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-PLANNING COMMANDS (in Claude Code):
+SMALL TASKS (one command, in Claude Code):
+
+  /saha:quick "<task>" Plan a small change in one pass, then /saha:execute
+
+PLANNING COMMANDS — large tasks (in Claude Code):
 
   /saha:init <name>    Initialize new task folder
   /saha:research       Deep codebase exploration
@@ -37,7 +41,12 @@ EXECUTION COMMANDS (in terminal — uses API credits):
   saha status [task-id]       Check execution status
   saha clean [task-id]        Clean execution state
 
-WORKFLOW:
+WORKFLOW — small task (1-2 file change):
+
+  1. /saha:quick "<one-line task>"   (one-pass plan, auto-sets current task)
+  2. /saha:execute                   (subscription) — or `saha run` for API
+
+WORKFLOW — large task:
 
   1. /saha:init my-feature       (auto-sets current task)
   2. /saha:task                   (define what we're building)
@@ -46,11 +55,6 @@ WORKFLOW:
   5. /saha:verify stories
   6. /saha:plan
   7. /saha:execute                (subscription) — or `saha run` for API
-
-MODES:
-
-  --mode=full      Complete planning (all artifacts)
-  --mode=minimal   Lightweight (task + plan only)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

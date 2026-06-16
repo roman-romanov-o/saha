@@ -56,7 +56,6 @@ task-XX-short-name/
 # Task-XX: [Task Title]
 
 **Status:** Planning | In Progress | Completed
-**Mode:** Full | Minimal
 **Created:** YYYY-MM-DD
 
 ## Overview
@@ -292,10 +291,38 @@ As a [role], I want [feature] so that [benefit].
 
 ---
 
-## Planning Modes
+## Choosing a Planning Path
 
-### Full Mode
-For existing codebases. Includes all steps:
+Two **independent** considerations decide how much planning a task needs. Don't
+conflate them:
+
+- **Scope** — small (a 1-2 file fix, a tiny feature) vs. large (multi-component).
+- **Context** — greenfield (new area, little existing code) vs. existing codebase
+  (patterns and architecture matter).
+
+| | Small scope | Large scope |
+|---|---|---|
+| **Greenfield** | `/saha:quick` | full planning flow |
+| **Existing codebase** | `/saha:quick` | full planning flow |
+
+Scope, not context, picks the path. The codebase scan adapts to context: for an
+existing codebase it grounds artifacts in real files; for greenfield it proceeds
+from the description without inventing references.
+
+### Quick Path (small tasks)
+
+One command, one pass, no separate review gate:
+
+1. `/saha:quick "<one-line task>"` — does a light codebase scan and writes the
+   minimum the execution loop needs: a short `task-description.md`, one
+   `user-stories/US-001.md` whose acceptance criteria are the definition of done,
+   and one `implementation-plan/phase-01.md`.
+2. `/saha:execute` (or `saha run`) — the full verify loop runs unchanged.
+
+### Full Path (large tasks)
+
+The multi-step planning chain, each step verified before the next:
+
 1. Research (codebase exploration)
 2. Task Description
 3. User Stories + Verification
@@ -304,11 +331,9 @@ For existing codebases. Includes all steps:
 6. Test Specs + Verification
 7. Implementation Plan + Verification
 
-### Minimal Mode
-For greenfield projects. Includes:
-1. Task Description
-2. User Stories + Verification
-3. Definition of Done + Verification
+Both paths feed the **same** execution loop. The loop's only requirement is
+`task-description.md` + at least one user story with checkable `[ ]` acceptance
+criteria + at least one implementation phase.
 
 ---
 

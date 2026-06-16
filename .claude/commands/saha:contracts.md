@@ -1,14 +1,12 @@
 ---
-description: Define code changes — interfaces, classes, and API modifications
-argument-hint: [task-path]
+description: Define code changes and interface specifications
+argument-hint: [task-path] [--type=rest|graphql|grpc|event]
 allowed-tools: Read, Write, Glob, Grep, AskUserQuestion, Task, mcp__context7__resolve-library-id, mcp__context7__query-docs
 ---
 
 # Code Changes
 
-Define what needs to change in the codebase: new/modified classes, interfaces, APIs, Pydantic models, protocols, and module boundaries.
-
-**This is where implementation details live.** User stories describe WHAT behavior changes; code-changes describe HOW the codebase changes to deliver that behavior.
+Define interfaces, API endpoints, and data contracts.
 
 ## Arguments
 
@@ -17,103 +15,84 @@ Define what needs to change in the codebase: new/modified classes, interfaces, A
     1. Current task from `.sahaidachny/current-task` (set via `saha use`)
     2. Most recent task folder in `docs/tasks/`
   - If no context found, asks the user
+- `--type=<type>`: Contract type (rest, graphql, grpc, event)
 
 ## Prerequisites
 
 - Task folder must exist
 - User stories and design decisions should be defined
-- Only available in **full mode**
-
-Check mode in `{task_path}/README.md`. If minimal mode, inform user this step is skipped.
 
 ## Execution
 
-### 1. Identify What Changes
+### 1. Identify Interfaces
 
-Review artifacts to find codebase changes needed:
-- `{task_path}/user-stories/*.md` - Features to implement
+Review artifacts to find interfaces that need contracts:
+- `{task_path}/user-stories/*.md` - Features requiring APIs
 - `{task_path}/design-decisions/*.md` - Architectural choices
-- `{task_path}/research/*.md` - Existing code patterns and structures
+- `{task_path}/research/*.md` - Existing API patterns
 
-Types of changes to document:
-- **New classes/models** - Pydantic models, dataclasses, domain objects
-- **Modified interfaces** - New methods on existing protocols/ABCs
-- **New/modified API endpoints** - REST, GraphQL, gRPC changes
-- **Event schemas** - New message types for queues/events
-- **Module boundary changes** - New public functions, changed signatures
-- **Configuration changes** - New settings, env vars, feature flags
+Types of contracts:
+- **REST endpoints** - HTTP APIs
+- **GraphQL schemas** - Query/Mutation definitions
+- **gRPC services** - Protobuf definitions
+- **Event schemas** - Message queue contracts
+- **Internal interfaces** - Module boundaries
 
-### 2. Gather Context
+### 2. Gather Requirements
 
-For each change, determine:
-- What existing code is affected? (file paths, classes)
-- What's the current interface/signature?
-- What fields/methods are added/modified/removed?
+For each interface, determine:
+- Who consumes it? (frontend, mobile, other services)
+- What data is exchanged?
 - What are the error cases?
-- Are there breaking changes?
+- Authentication/authorization requirements?
+- Rate limiting or quotas?
 
-### 3. Create Code Change Files
+### 3. Create Contract Files
 
 Create `{task_path}/code-changes/{name}.md`:
 
-```markdown
-# Code Change: [Component/Feature Name]
+#### REST Code Change
 
-**Scope:** New Class | Modified Interface | New Endpoint | Event Schema
+```markdown
+# Code Change: [Resource Name]
+
+**Type:** REST
+**Base Path:** `/api/v1/[resource]`
+**Authentication:** Bearer Token | API Key | None
 **Status:** Draft | Review | Approved
 
 ## Overview
 
-[What changes and why — link to user stories this serves]
+[What this API does and who uses it]
 
-## Affected Files
+## Endpoints
 
-- `path/to/existing_file.py` - Modified: add new method
-- `path/to/new_file.py` - New file
+### POST /api/v1/[resource]
 
-## Changes
+**Description:** Create a new [resource]
 
-### New: [ClassName] (Pydantic Model)
-
-```python
-class TaskResult(BaseModel):
-    """Result of a task execution."""
-    task_id: str
-    status: Literal["success", "failure", "timeout"]
-    output: str
-    duration_seconds: float
-    files_changed: list[str] = []
-```
-
-### Modified: [ExistingClass]
-
-**Current signature:**
-```python
-def run(self, prompt: str) -> str: ...
-```
-
-**New signature:**
-```python
-def run(self, prompt: str, timeout: int = 300) -> TaskResult: ...
-```
-
-**Breaking change:** Yes — return type changed from `str` to `TaskResult`
-
-### New Endpoint: POST /api/v1/tasks
+**Authentication:** Required
 
 **Request:**
+
 ```json
 {
-  "prompt": "string (required)",
-  "timeout": "number (optional, default: 300)"
+  "field1": "string (required) - Description",
+  "field2": "number (optional) - Description",
+  "nested": {
+    "subfield": "string"
+  }
 }
 ```
 
-**Response (201):**
+**Response (201 Created):**
+
 ```json
 {
-  "task_id": "string",
-  "status": "string"
+  "id": "string - Unique identifier",
+  "field1": "string",
+  "field2": "number",
+  "createdAt": "ISO 8601 datetime"
 }
 ```
 
@@ -121,25 +100,138 @@ def run(self, prompt: str, timeout: int = 300) -> TaskResult: ...
 
 | Status | Code | Description |
 |--------|------|-------------|
-| 400 | VALIDATION_ERROR | Invalid request |
-| 401 | UNAUTHORIZED | Missing auth |
+| 400 | VALIDATION_ERROR | Invalid request body |
+| 401 | UNAUTHORIZED | Missing or invalid token |
+| 409 | CONFLICT | Resource already exists |
+
+---
+
+### GET /api/v1/[resource]/{id}
+
+**Description:** Retrieve a [resource] by ID
+
+**Path Parameters:**
+- `id` (string, required): Resource identifier
+
+**Response (200 OK):**
+
+```json
+{
+  "id": "string",
+  "field1": "string",
+  ...
+}
+```
+
+**Errors:**
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 404 | NOT_FOUND | Resource does not exist |
+
+---
+
+### GET /api/v1/[resource]
+
+**Description:** List [resources] with pagination
+
+**Query Parameters:**
+- `page` (number, optional, default: 1): Page number
+- `limit` (number, optional, default: 20, max: 100): Items per page
+- `sort` (string, optional): Sort field
+- `order` (string, optional): asc | desc
+
+**Response (200 OK):**
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 100,
+    "totalPages": 5
+  }
+}
+```
 
 ## Data Models
 
+### [Resource]
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| task_id | str | Yes | UUID v4 |
-| status | Literal | Yes | success/failure/timeout |
+| id | string | Yes | UUID v4 |
+| field1 | string | Yes | ... |
+| field2 | number | No | ... |
+| createdAt | datetime | Yes | ISO 8601 |
+| updatedAt | datetime | Yes | ISO 8601 |
 
-## Dependencies
+### Enums
 
-- **Requires:** [Other code changes or external dependencies]
-- **Enables:** [What this unblocks]
+**Status:**
+- `active` - Resource is active
+- `inactive` - Resource is disabled
+- `deleted` - Soft deleted
+
+## Rate Limiting
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| POST /resource | 100 | 1 hour |
+| GET /resource | 1000 | 1 hour |
 
 ## Related
 
 - **Stories:** US-XXX, US-YYY
 - **Decisions:** DD-XXX
+```
+
+#### Event Contract
+
+```markdown
+# Event Contract: [Event Name]
+
+**Type:** Event (Kafka/RabbitMQ/SQS)
+**Topic:** `domain.entity.action`
+**Status:** Draft | Review | Approved
+
+## Overview
+
+[When this event is published and who consumes it]
+
+## Event Schema
+
+```json
+{
+  "eventId": "string - UUID",
+  "eventType": "domain.entity.action",
+  "timestamp": "ISO 8601",
+  "version": "1.0",
+  "payload": {
+    "entityId": "string",
+    "data": { ... }
+  },
+  "metadata": {
+    "correlationId": "string",
+    "causationId": "string"
+  }
+}
+```
+
+## Producers
+
+- [Service that publishes this event]
+
+## Consumers
+
+- [Service that subscribes] - [What it does with the event]
+
+## Guarantees
+
+- **Ordering:** [Per-partition | None]
+- **Delivery:** [At least once | Exactly once]
+- **Retention:** [Duration]
 ```
 
 ### 4. Update Code Changes README
@@ -149,41 +241,40 @@ Update `{task_path}/code-changes/README.md`:
 ```markdown
 # Code Changes
 
-Codebase modifications required for this task.
+Interface definitions and API specifications.
 
 ## Contents
 
-| Name | Scope | Status | Stories |
-|------|-------|--------|---------|
-| [Component] | New Class | Draft | US-001 |
-| [API Name] | Modified Endpoint | Draft | US-002 |
+| Name | Type | Status |
+|------|------|--------|
+| Users API | REST | Draft |
+| Auth Events | Event | Draft |
 
-## Change Map
+## API Map
 
-### New Code
-- [component.md](component.md) - New domain model
+### Public APIs
+- [users.md](users.md) - User management
 
-### Modified Code
-- [api-changes.md](api-changes.md) - Endpoint modifications
+### Internal APIs
+- [...]
 
-### Breaking Changes
-- [None / list any breaking changes]
+### Events
+- [auth-events.md](auth-events.md) - Authentication events
 ```
 
-## Code Change Guidelines
+## Contract Guidelines
 
-Good code change specs:
-- [ ] Clearly identify which files are affected
-- [ ] Show current vs. new signatures for modifications
-- [ ] Include complete field definitions with types
-- [ ] Document all error cases for APIs
-- [ ] Flag breaking changes explicitly
-- [ ] Link back to the user stories they serve
-- [ ] Match existing code patterns found in research
+Good contracts:
+- [ ] Define all request/response fields with types
+- [ ] Document all error cases
+- [ ] Include authentication requirements
+- [ ] Specify validation rules
+- [ ] Are versioned
+- [ ] Match existing API patterns in the codebase
 
 ## 5. Review Artifacts
 
-Launch the reviewer agent to validate code change specs:
+Launch the reviewer agent to validate code changes:
 
 ```
 Task tool:
@@ -196,7 +287,7 @@ Task tool:
     Task path: {task_path}
     Artifacts to review: {task_path}/code-changes/*.md (exclude README)
 
-    Review the code change specifications and report any issues.
+    Review the code changes and report any issues.
 ```
 
 If the reviewer finds blockers (🔴), fix before proceeding.
@@ -205,5 +296,5 @@ If the reviewer finds blockers (🔴), fix before proceeding.
 
 ```
 /saha:contracts docs/tasks/task-01-auth
-/saha:contracts
+/saha:contracts --type=rest
 ```

@@ -569,7 +569,7 @@ def _safe_read_text(path: Path) -> str:
         return ""
 
 
-def _apply_status_policy(items, policy):  # type: ignore[no-untyped-def]
+def _apply_status_policy(items, policy):
     out = []
     for item in items:
         mode = policy.get(item.status, "full")
@@ -586,7 +586,7 @@ def _estimate_size_bytes(artifacts: TaskArtifacts) -> int:
     return len(artifacts.model_dump_json(exclude_none=True).encode("utf-8"))
 
 
-def _stub_largest(items) -> str | None:  # type: ignore[no-untyped-def]
+def _stub_largest(items) -> str | None:
     """Mutate `items` in place: stub the entry with the largest body. Return its label, or None if nothing stubbable remains."""
     if isinstance(items, dict):
         return _stub_largest_dict(items)
@@ -602,7 +602,7 @@ def _stub_largest_dict(items: dict[str, str]) -> str | None:
     return key
 
 
-def _stub_largest_list(items) -> str | None:  # type: ignore[no-untyped-def]
+def _stub_largest_list(items) -> str | None:
     largest_idx: int | None = None
     largest_size = -1
     for idx, item in enumerate(items):

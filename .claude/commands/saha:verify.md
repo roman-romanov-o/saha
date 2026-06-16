@@ -49,16 +49,15 @@ Artifacts Found:
 
 ### 2. Completeness Check
 
-Verify required artifacts exist based on mode:
+Verify required artifacts exist.
 
-**Minimal Mode:**
+**Minimum the execution loop needs:**
 - [ ] task-description.md
-- [ ] At least 1 user story
-- [ ] At least 1 test spec
+- [ ] At least 1 user story with checkable `[ ]` acceptance criteria
 - [ ] At least 1 implementation phase
 
-**Full Mode:**
-- [ ] All minimal requirements
+**Recommended for larger tasks (full planning flow):**
+- [ ] At least 1 test spec
 - [ ] At least 1 design decision
 - [ ] code changes (if API changes involved)
 
