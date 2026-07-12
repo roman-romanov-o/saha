@@ -1,7 +1,7 @@
 ---
 description: Document architectural and design decisions
 argument-hint: [task-path] [--title=<decision-title>]
-allowed-tools: Read, Write, Glob, Grep, AskUserQuestion, WebSearch, Task, mcp__context7__resolve-library-id, mcp__context7__query-docs
+allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, WebSearch, Task, mcp__context7__resolve-library-id, mcp__context7__query-docs
 ---
 
 # Design Decisions
@@ -159,6 +159,7 @@ Create `{task_path}/design-decisions/DD-XXX-{slug}.md`:
 - **Stories:** [US-XXX, US-YYY that this affects]
 - **Supersedes:** [DD-XXX if replacing another decision]
 - **Related Decisions:** [DD-XXX other related decisions]
+- **Architecture Views:** [view ids in `docs/architecture/` affected by this decision, e.g. `task-03-quota-flow`; omit if the decision doesn't touch the model]
 
 ## References
 
@@ -166,7 +167,34 @@ Create `{task_path}/design-decisions/DD-XXX-{slug}.md`:
 - [Research that informed this]
 ```
 
-### 5. Update Design Decisions README
+### 5. Update the Architecture Model (LikeC4)
+
+`/saha:decide` is the **only writer** of the project architecture model:
+`docs/architecture/*.c4` (LikeC4 DSL). One model per project, many views —
+never a model per task, never copies of the model into task folders.
+
+For each decision that is **genuinely architectural** (new component, new
+boundary, new external system — not local design choices):
+
+1. If `docs/architecture/` doesn't exist, offer to create it. Convention (not
+   a requirement — LikeC4 merges all `*.c4` files in the directory):
+   - `model.c4` — elements: systems, containers, components
+   - `views.c4` — views over the model
+2. Update `model.c4`/`views.c4` **in the same pass** as the DD doc.
+3. View naming:
+   - Evergreen views keep stable ids: `index` (landscape), `context`, one per
+     container.
+   - Task-scoped views are named `task-NN-<slug>` (e.g. `task-03-quota-flow`)
+     and show the slice of architecture this task changes. Keep them after the
+     task ships (they document *why* the architecture looks like this); prune
+     only when they stop rendering against the current model.
+4. Record the affected view ids in the DD doc's `**Architecture Views:**` line.
+
+Skip this step entirely when the decision isn't architectural, or when the
+user declines the model — planning works identically without it. Never touch
+the model for local design choices.
+
+### 6. Update Design Decisions README
 
 Update `{task_path}/design-decisions/README.md`:
 
@@ -194,7 +222,7 @@ Architectural decisions and their rationale.
 _None_
 ```
 
-### 6. Update Task README
+### 7. Update Task README
 
 Update progress table in `{task_path}/README.md`.
 
@@ -208,7 +236,7 @@ Good decisions:
 - [ ] Are reversible or state the cost of reversal
 - [ ] Reference supporting research
 
-## 7. Review Artifacts
+## 8. Review Artifacts
 
 Launch the reviewer agent to validate design decisions:
 

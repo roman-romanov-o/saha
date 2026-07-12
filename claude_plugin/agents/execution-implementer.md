@@ -66,14 +66,20 @@ Do NOT start coding until you understand:
 4. **Implement the Code**
    - Read existing files before modifying
    - Make minimal necessary changes
-   - Follow existing patterns in the codebase
-   - Add tests if specified in the plan
+   - Follow existing patterns and the **language of the project** (don't assume Python)
+   - Add tests if specified in the plan, in the project's test framework
+   - For acceptance criteria tagged `<!-- verify: build -->`, make sure the project
+     **compiles/launches**; for `<!-- verify: manual: ... -->`, implement the behavior
+     but don't try to write a headless test for it (QA routes it to a human)
    - Keep functions small and focused (< 50 lines)
 
-5. **Self-Validate**
-   - Check that code parses correctly (Python: `python -c "import module"`)
-   - Verify imports work
-   - Run quick syntax checks
+5. **Self-Validate** (use the project's stack — see `.sahaidachny/stack.yaml` or detect)
+   - Check that code parses/compiles. Examples:
+     - Python: `python -c "import module"`
+     - Swift: `swift build`
+     - Node/TS: `tsc --noEmit` or `npm run build`
+     - Rust: `cargo check`  · Go: `go build ./...`
+   - Verify imports/dependencies resolve
    - Ensure no obvious bugs
 
 ## Tool Usage
@@ -102,16 +108,27 @@ Follow these principles:
 - **No magic**: Avoid magic numbers, use constants
 - **Consistent formatting**: Match existing codebase style
 
-### Python-Specific
-- **Use Pydantic v2** for data models (not dicts)
-- **Type hints**: Add type annotations to all function signatures
-- **Imports at top**: Never put imports inside functions
-- **Modern syntax**: Use Python 3.11+ features (match, |, etc.)
+### Language-specific (match the project's stack)
+Follow the idioms of whatever language the project uses. Examples:
+- **Python**: Pydantic v2 for data models (not dicts); type hints on all signatures;
+  imports at module top (never inside functions); modern 3.11+ syntax (`match`, `|`).
+- **Swift**: value types/structs where possible; `Codable` for models; follow Swift API
+  design guidelines; keep AppKit/UIKit view code thin.
+- **TypeScript**: strict types (no implicit `any`); prefer `interface`/`type` over loose
+  objects; ES modules at top.
+- **Rust**: lean on the type system and `Result`; avoid `unwrap()` in non-test code.
+- **Go**: idiomatic error returns; small interfaces.
+
+In all languages: strong typing for repeatable/complex data over untyped maps/dicts.
 
 ## Anti-Patterns to Avoid
 
 DO NOT:
 - Add features not in the specification
+- Edit `docs/architecture/*.c4` — the architecture model is planning-owned
+  (`/saha:decide` is its only writer). If your implementation must deviate
+  from the model, note the deviation in `notes`; a follow-up `/saha:decide`
+  reconciles
 - Refactor unrelated code
 - Add unnecessary comments or docstrings
 - Create abstractions for one-time operations
@@ -161,7 +178,7 @@ After implementation, you MUST return a structured JSON response:
   "status": "success",
   "summary": "Implemented user authentication with JWT tokens",
   "notes": "Used existing bcrypt library for password hashing",
-  "next_steps": "Ready for testing - run pytest tests/auth/"
+  "next_steps": "Ready for testing - run the project's test suite for the auth module"
 }
 ```
 
@@ -187,7 +204,7 @@ After implementation, you MUST return a structured JSON response:
   "status": "success",
   "summary": "Added UserService class with create, update, delete methods",
   "notes": "Followed existing repository pattern from OrderService",
-  "next_steps": "Run pytest tests/services/test_user.py"
+  "next_steps": "Run the project's test suite for the user service"
 }
 ```
 

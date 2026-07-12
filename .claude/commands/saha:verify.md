@@ -114,7 +114,35 @@ Evaluate artifact quality:
 - [ ] Steps are actionable
 - [ ] Definition of done is specified
 
-### 5. Mode-Specific Verification
+### 5. Architecture Model Validation
+
+Only when `docs/architecture/` exists (skip silently otherwise — the model is
+opt-in).
+
+**DSL validation:**
+- If the `likec4` CLI is on PATH (`command -v likec4`), run it against
+  `docs/architecture/`:
+  ```bash
+  likec4 validate docs/architecture
+  ```
+  A non-zero exit (DSL error, dangling reference) is a verify **failure**,
+  like any other inconsistent artifact. (Do not use `likec4 export json` for
+  pass/fail — it exits 0 even when the model has errors.)
+- CLI absent → skip with a one-line note ("likec4 CLI not found — DSL
+  validation skipped"). Never a failure; never block planning on node tooling.
+
+**View references:**
+- Collect view ids referenced from DD docs (`**Architecture Views:**` lines in
+  `{task_path}/design-decisions/DD-*.md`).
+- Get the actual view list: with the CLI, the keys of `views` in
+  `likec4 export json --skip-layout -o /tmp/likec4-verify.json docs/architecture`
+  (delete the file afterwards); without it, `view <id>` declarations in
+  `docs/architecture/*.c4`.
+- Verify every referenced view id exists in that list.
+- A DD referencing a non-existent view id is an inconsistency — report it like
+  the other cross-reference errors in step 3.
+
+### 6. Mode-Specific Verification
 
 #### Manual Mode (default)
 
@@ -158,18 +186,20 @@ Capture and report stdout/stderr.
 
 #### Test Mode
 
-If tests already exist, run them:
+If tests already exist, run them using the project's resolved test command
+(`.sahaidachny/stack.yaml` `test.command`, else auto-detect from marker files —
+saha is not Python-specific):
 
 ```bash
-# Detect test framework and run
-pytest tests/ -v
-# or
-npm test
-# or
-go test ./...
+# Whatever the stack resolves to, e.g.:
+pytest -q          # Python (pyproject.toml)
+swift test         # Swift (Package.swift)
+npm test           # Node (package.json)
+cargo test         # Rust (Cargo.toml)
+go test ./...      # Go (go.mod)
 ```
 
-### 6. Generate Verification Report
+### 7. Generate Verification Report
 
 Create `{task_path}/verification-report.md`:
 
@@ -187,6 +217,7 @@ Create `{task_path}/verification-report.md`:
 | Completeness | ✅ | All required artifacts present |
 | Consistency | ✅ | All references valid |
 | Quality | ⚠️ | 2 suggestions |
+| Architecture model | ✅ | DSL valid, all referenced views exist (omit row if no `docs/architecture/`) |
 
 ## Artifacts Verified
 
@@ -221,7 +252,7 @@ _None_
 - Date: YYYY-MM-DD
 ```
 
-### 7. Update Task README
+### 8. Update Task README
 
 Update `{task_path}/README.md`:
 - Add verification status

@@ -46,6 +46,8 @@ Task tool:
     - Task path: {task_path}
     - Task description: {task_path}/task-description.md
     - Task README: {task_path}/README.md
+    - Architecture model (if present): docs/architecture/*.c4 — read as context;
+      flag drift between the model and the actual code as a research finding
     ${topic ? "- Focus topic: " + topic : ""}
 
     Research the codebase thoroughly. Be critical and skeptical.
