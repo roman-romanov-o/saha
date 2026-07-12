@@ -140,7 +140,7 @@ MARKER_TABLE: list[StackMarker] = [
         ),
     ),
     StackMarker(
-        markers=["Package.swift"],
+        markers=["Package.swift", "*.xcodeproj"],
         profile=StackProfile(
             language="swift",
             build=BuildConfig(command="swift build"),
@@ -198,9 +198,13 @@ MARKER_TABLE: list[StackMarker] = [
 
 
 def _detect_from_markers(repo_root: Path) -> StackProfile:
-    """Return the first profile whose marker file exists, else a blank one."""
+    """Return the first profile whose marker matches, else a blank one.
+
+    Marker names may be globs (e.g. ``*.xcodeproj``); ``Path.glob`` also
+    matches literal names.
+    """
     for marker in MARKER_TABLE:
-        if any((repo_root / name).exists() for name in marker.markers):
+        if any(next(repo_root.glob(name), None) for name in marker.markers):
             return marker.profile.model_copy(deep=True)
     return StackProfile()
 

@@ -46,21 +46,24 @@ items listed in `truncation_notes` if `truncated: true`.
 Saha is **not** Python-specific. Before running anything, resolve the commands for
 **this** project, in priority order:
 
-1. **Read `.sahaidachny/stack.yaml`** at the repo root if it exists. It declares
-   `build.command`, `test.command`, `test.file_globs`, `quality.commands`, and
-   `run.command`. An **empty string means "skip that gate"** (e.g. a UI-only target
+1. **Use the resolved `stack` object in your context** if the orchestrator provided
+   one — it already merged `.sahaidachny/stack.yaml` over marker auto-detection.
+   An **empty command string means "skip that gate"** (e.g. a UI-only target
    with no headless tests sets `test.command: ""`).
-2. **Else auto-detect** from marker files at the repo root:
+2. **Else read `.sahaidachny/stack.yaml`** at the repo root if it exists. It declares
+   `build.command`, `test.command`, `test.file_globs`, `quality.commands`, and
+   `run.command`.
+3. **Else auto-detect** from marker files at the repo root:
 
    | Marker | build | test | run |
    |--------|-------|------|-----|
-   | `pyproject.toml` / `setup.py` | — | `pytest -q` | `python -m <pkg>` |
+   | `pyproject.toml` / `setup.py` | — | `pytest -v` | — |
    | `Package.swift` / `*.xcodeproj` | `swift build` | `swift test` | `swift run` |
    | `package.json` | `npm run build` (if defined) | `npm test` | `npm start` |
    | `Cargo.toml` | `cargo build` | `cargo test` | `cargo run` |
    | `go.mod` | `go build ./...` | `go test ./...` | `go run .` |
 
-3. If neither a profile nor a known marker is found, inspect the repo for an obvious
+4. If neither a profile nor a known marker is found, inspect the repo for an obvious
    test command before failing, and say so in your `summary`.
 
 Use the **resolved test command** wherever this doc says "run the tests" — never
@@ -128,7 +131,7 @@ loop to churn to max-iter.
      AC over it and never edit the model — a follow-up `/saha:decide`
      reconciles
 
-5. **Document Results**
+7. **Document Results**
    - Record pass/fail status for each criterion
    - Capture test output summary
    - Note any unexpected behavior

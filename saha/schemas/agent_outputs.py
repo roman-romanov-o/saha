@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from saha.models.result import ManualCheck
+
 
 class ImplementationStatus(str, Enum):
     """Status codes for implementation agent."""
@@ -67,20 +69,6 @@ class QACheck(BaseModel):
         default=None,
         description="Concrete tool used to verify (e.g. resolved test command, playwright). "
         "Retained for backward compatibility with older agent outputs.",
-    )
-
-
-class ManualCheck(BaseModel):
-    """An acceptance criterion that requires human sign-off.
-
-    Manual checks (``verify:manual`` ACs) are never auto-verified and never
-    trigger re-implementation. They accumulate until a human confirms them.
-    """
-
-    criterion: str = Field(description="The acceptance criterion awaiting human verification")
-    instructions: str = Field(
-        default="",
-        description="Step-by-step instructions for the human verifier to follow",
     )
 
 

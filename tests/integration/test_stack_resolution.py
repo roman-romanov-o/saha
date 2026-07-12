@@ -43,6 +43,12 @@ class TestAutoDetection:
         assert profile.test.command == test_command
         assert profile.test.file_globs  # every detected stack declares globs
 
+    def test_xcodeproj_glob_marker_detects_swift(self, tmp_path):
+        # Pure Xcode apps have no Package.swift; the marker is a glob.
+        (tmp_path / "MyApp.xcodeproj").mkdir()
+
+        assert load_stack_profile(tmp_path).language == "swift"
+
     def test_no_marker_yields_neutral_skip_profile(self, tmp_path):
         profile = load_stack_profile(tmp_path)
 

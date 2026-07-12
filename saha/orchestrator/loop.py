@@ -181,6 +181,7 @@ class AgenticLoop:
             "task_id": config.task_id,
             "task_path": str(config.task_path),
             "iteration": state.current_iteration,
+            "stack": self._get_stack().to_context(),
             "artifacts": artifacts.model_dump(exclude_none=True, mode="json"),
         }
 
@@ -1043,8 +1044,11 @@ class AgenticLoop:
         command = stack.test.command
         if not command:
             return ""
-        if stack.language == "python" and "pytest" in state.enabled_tools:
-            return self._tools.run_tool("pytest", config.task_path).stdout
+        argv = shlex.split(command)
+        if stack.language == "python" and "pytest" in state.enabled_tools and argv[0] == "pytest":
+            # Honor stack.yaml overrides (e.g. "pytest -x -q") via extra_args.
+            tool_config = {"verbose": False, "extra_args": argv[1:]}
+            return self._tools.run_tool("pytest", config.task_path, config=tool_config).stdout
         return self._run_test_command(command)
 
     def _run_test_command(self, command: str) -> str:

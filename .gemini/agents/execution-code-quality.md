@@ -86,7 +86,7 @@ the Python examples wherever they appear.
    - If auto-fix made changes, note it in summary
    - This often resolves all issues, allowing immediate PASS
 
-4. **Run Quality Tools**
+3. **Run Quality Tools**
    For each changed source file, run the **resolved** quality commands. For the
    Python profile:
    - **Ruff**: Run `ruff check {file} --output-format=json` for linting
@@ -96,12 +96,12 @@ the Python examples wherever they appear.
    For other stacks, run the resolved equivalents (e.g. `swiftlint lint --quiet`,
    `eslint -f json`, `cargo clippy`, `go vet`) and parse their output similarly.
 
-5. **Analyze Results Intelligently**
+4. **Analyze Results Intelligently**
    - Filter out false positives (see guidelines below)
    - Detect pre-existing issues using git diff
    - Identify which issues are blocking vs advisory
 
-6. **Make Quality Decision**
+5. **Make Quality Decision**
    - PASS if no real blocking issues
    - FAIL only for genuine problems that need fixing
 
