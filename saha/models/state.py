@@ -21,6 +21,10 @@ class LoopPhase(StrEnum):
     DOD_CHECK = "dod_check"
     STOPPED = "stopped"
     COMPLETED = "completed"
+    # Code-complete, but one or more verify:manual acceptance criteria still
+    # await human sign-off. A success terminal state — it prevents the loop
+    # from churning to max-iter on criteria it can never auto-verify.
+    COMPLETED_PENDING_MANUAL = "completed_pending_manual"
     FAILED = "failed"
 
 
@@ -107,6 +111,7 @@ class ExecutionState(BaseModel):
             LoopPhase.SCHEDULED,
             LoopPhase.STOPPED,
             LoopPhase.COMPLETED,
+            LoopPhase.COMPLETED_PENDING_MANUAL,
             LoopPhase.FAILED,
         )
 

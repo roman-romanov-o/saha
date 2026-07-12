@@ -70,6 +70,13 @@ class QACheckResult(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManualCheck(BaseModel):
+    """An acceptance criterion deferred to human sign-off (verify:manual)."""
+
+    criterion: str
+    instructions: str = ""
+
+
 class QAResult(BaseModel):
     """Result from QA subagent."""
 
@@ -79,6 +86,7 @@ class QAResult(BaseModel):
     fix_info: str | None = None
     test_output: str = ""
     script_outputs: dict[str, str] = Field(default_factory=dict)
+    manual_checks: list[ManualCheck] = Field(default_factory=list)
 
     @property
     def all_checks_passed(self) -> bool:

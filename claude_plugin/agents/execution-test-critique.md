@@ -42,13 +42,39 @@ re-read source files in the project for the actual test code (the bundle does no
 contain those). If the bundle reports `truncated: true`, re-read only the items
 listed in `truncation_notes`.
 
+## Resolving test files (language-agnostic)
+
+Saha is **not** Python-specific — the project may be Swift, Node, Rust, Go, etc.
+Before globbing for tests, resolve **this** project's conventions, in priority order:
+
+1. **Read `.sahaidachny/stack.yaml`** at the repo root if it exists and use its
+   `test.file_globs` list verbatim. An empty `test.command`/empty `file_globs` means
+   the target has **no headless tests** (e.g. a UI-only surface) — in that case there
+   is nothing to critique; report `critique_passed: true` with a note and skip quality
+   scoring (completeness is still checked against the plan).
+2. **Else auto-detect** test-file patterns from the stack:
+
+   | Stack (marker) | Test-file globs |
+   |----------------|-----------------|
+   | Python (`pyproject.toml`) | `**/test_*.py`, `**/*_test.py`, `**/tests/**/*.py` |
+   | Swift (`Package.swift`/`*.xcodeproj`) | `**/*Tests.swift`, `**/Tests/**/*.swift` |
+   | Node/TS (`package.json`) | `**/*.test.{ts,tsx,js,jsx}`, `**/*.spec.{ts,tsx,js,jsx}` |
+   | Rust (`Cargo.toml`) | `**/tests/**/*.rs`, `#[cfg(test)]` modules in `src/**/*.rs` |
+   | Go (`go.mod`) | `**/*_test.go` |
+
+Wherever this doc shows a `**/test_*.py`-style glob, substitute the resolved globs for
+the project's actual stack. The code examples below are written in Python for
+illustration — **the principles (real assertions, no over-mocking, edge cases, test
+independence) apply to every language**; map them onto the project's test framework.
+
 ## Starting Instructions
 
 **Follow this sequence:**
 
 1. **Read `artifacts.user_stories`, `artifacts.code_changes`, `artifacts.test_specs`** from
    the bundled context (NOT from the task folder).
-2. **Find all test files** in the project (these live in source, not in the bundle).
+2. **Find all test files** in the project using the resolved globs above (these live in
+   source, not in the bundle).
 3. **Cross-reference**: map tests to acceptance criteria and code changes.
 4. **Identify gaps**: what's planned but not tested?
 5. **Analyze quality** of existing tests across 6 dimensions.
@@ -314,7 +340,7 @@ For each test spec, extract:
 #### 1d. Find Actual Test Files → Map to Plan
 
 ```
-Glob for test files: **/test_*.py, **/*_test.py
+Glob for test files using the resolved globs (see "Resolving test files").
 For each test file:
   - Read the test functions
   - Map back to: which AC does this test cover? Which code change?
@@ -346,10 +372,11 @@ Report in structured fields:
 
 For each file in `files_changed` that is production code (not a test file):
 
-1. **Find corresponding test file(s)**
-   - Check `tests/unit/test_{module}.py`
-   - Check `tests/integration/test_{module}.py`
-   - Search for imports of the changed module in test files
+1. **Find corresponding test file(s)** using the project's conventions
+   - Map the changed file to its test counterpart per the resolved stack — e.g.
+     Python `tests/.../test_{module}.py`, Swift `{Type}Tests.swift`,
+     Node `{module}.test.ts`, Go `{file}_test.go`.
+   - Search for references/imports of the changed module/type in test files
 
 2. **Verify functions/classes are tested**
    - If a new function was added, is there a test for it?
@@ -374,8 +401,8 @@ For each file in `files_changed` that is production code (not a test file):
 ### Step 3: Analyze Test Quality
 
 1. **Find Test Files**
-   - Glob for Python: `**/test_*.py`, `**/*_test.py`, `**/tests/**/*.py`
-   - Glob for TypeScript: `**/*.test.{ts,tsx,js,jsx}`, `**/*.spec.{ts,tsx,js,jsx}`
+   - Glob using the resolved test-file globs for this project's stack (see
+     "Resolving test files" — Python, Swift, Node, Rust, Go, etc.)
    - Focus on test files that cover `files_changed`
 
 2. **For Each Test File:**

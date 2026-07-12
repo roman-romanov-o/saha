@@ -18,6 +18,17 @@ Generate test specifications before implementation.
 
 **The key question for every user story is:** "Can I write an E2E test that walks through the entire flow?" If yes, start there. Only drop down to integration/unit when E2E isn't feasible or sufficient.
 
+> **Match the project's stack.** Saha is language-agnostic — the project may be Swift,
+> Node, Rust, Go, or Python. Write specs in the project's own test framework
+> (`swift test`/XCTest, `npm test`/Vitest/Jest, `cargo test`, `go test`, pytest, …);
+> the `python`/`pytest` snippets below are **illustrative only**. Resolve the stack
+> from `.sahaidachny/stack.yaml` or the repo's marker files.
+>
+> **Some acceptance criteria can't be tested headlessly** (UI rendering, visual
+> layout, drill-in feel). Those ACs are tagged `<!-- verify: manual: ... -->` in the
+> user story — do **not** invent a brittle automated spec for them. Note them in the
+> coverage matrix's gap column instead; the execution loop routes them to a human.
+
 ## Arguments
 
 - **task-path** (optional): Path to task folder
@@ -146,8 +157,9 @@ Test component interactions and API behavior.
 **Description:** [What this tests]
 
 **Setup:**
-```python
-# Fixture or setup code
+```
+# Fixture or setup code, in the project's test framework
+# (XCTest setUp, Jest beforeEach, pytest fixture, Go TestMain, …)
 ```
 
 **Input:**
@@ -182,10 +194,9 @@ Test component interactions and API behavior.
 
 ## Data Fixtures
 
-```python
-@pytest.fixture
-def sample_data():
-    return { ... }
+```
+# Shared test data, in the project's test framework's fixture mechanism
+sample_data = { ... }
 ```
 ```
 
@@ -196,7 +207,7 @@ Test isolated functions and classes.
 ```markdown
 # Unit Test Spec: [Module/Function Name]
 
-**File:** `src/path/to/module.py`
+**File:** `<path to the module/type under test, in the project's language>`
 **Priority:** High | Medium | Low
 **Status:** Draft | Ready | Implemented
 

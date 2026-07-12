@@ -73,6 +73,30 @@ Goals and limits:
 - Keep it short. This grounds the plan; it is not a research deliverable. Do **not**
   write a `research/` artifact.
 
+**Also detect the project's stack** (saha is not Python-specific). Glob the repo root
+for a marker file and note the toolchain so the AC/DoD reference real commands:
+
+| Marker | test | quality |
+|--------|------|---------|
+| `pyproject.toml` / `setup.py` | `pytest -q` | `ruff check`, `ty`, `complexipy` |
+| `Package.swift` / `*.xcodeproj` | `swift test` | `swiftlint` |
+| `package.json` | `npm test` | `eslint`, `tsc --noEmit` |
+| `Cargo.toml` | `cargo test` | `cargo clippy` |
+| `go.mod` | `go test ./...` | `go vet`, `golangci-lint run` |
+
+If the detected stack is **non-Python** and `.sahaidachny/stack.yaml` does not exist,
+write one now so `/saha:execute` resolves the right commands. Example for Swift:
+
+```yaml
+# .sahaidachny/stack.yaml
+build:   { command: "swift build" }
+test:    { command: "swift test", file_globs: ["**/*Tests.swift"] }
+quality: { commands: ["swiftlint"], changed_files_only: true }
+run:     { command: "swift run" }
+```
+
+Use `test.command: ""` for a target that genuinely has no headless tests (UI-only).
+
 ### Step 3 — Scaffold the task folder
 
 Create the folder structure and set it as the current task by running the init
@@ -136,18 +160,25 @@ As a developer, I want <the change>, so that <the benefit>.
 
 ## Acceptance Criteria
 
-- [ ] <Concrete, verifiable outcome 1, referencing the real files from the scan>
-- [ ] <Concrete, verifiable outcome 2>
-- [ ] <Concrete, verifiable outcome 3>
-- [ ] Tests covering the change pass; ruff/ty/complexity are clean on changed files
+- [ ] <Concrete, verifiable outcome 1, referencing the real files from the scan>   <!-- verify: automated -->
+- [ ] <Concrete, verifiable outcome 2>   <!-- verify: automated -->
+- [ ] <Concrete, verifiable outcome 3>   <!-- verify: build -->
+- [ ] The project's tests and quality checks pass on the changed files   <!-- verify: automated -->
 ```
 
 Rules:
 
 - Emit **2-5** acceptance criteria. Each must be concrete and verifiable, grounded
   in the files found in Step 2. Avoid vague items the loop can't check.
-- Always include a final AC for "tests pass + quality clean" so the verify loop
-  has a quality target.
+- Always include a final AC for "tests + quality checks pass" so the verify loop
+  has a quality target. Phrase it for the **detected stack** (e.g. "pytest + ruff/ty
+  clean" for Python, "swift test + swiftlint clean" for Swift) — do not hardcode
+  Python tools unless the project is Python.
+- **Tag each AC with a verify method** (`<!-- verify: automated|build|manual: ... -->`):
+  `automated` (default) for anything a headless test asserts; `build` for "it
+  compiles/launches"; `manual: <how a human checks it>` for UI rendering / visual
+  things no headless test can confirm. Manual ACs end the loop in
+  `completed_pending_manual` for human sign-off instead of churning to max-iter.
 - Use `- [ ]` checkboxes (the parsers also accept `- [x]`/`- [~]`) and the literal
   `**Status:**` line. Do not omit them.
 
@@ -189,9 +220,11 @@ Overwrite `<task_path>/implementation-plan/phase-01.md` with **exactly one** pha
 
 Phase is complete when ALL of the following are true:
 
-- [ ] All US-001 acceptance criteria are checked
-- [ ] Tests pass
-- [ ] Ruff / ty / complexity clean on changed files
+- [ ] All US-001 automated/build acceptance criteria are checked (manual ACs go to
+      human sign-off — they don't block completion)
+- [ ] The project's tests pass (per the detected stack / `.sahaidachny/stack.yaml`)
+- [ ] The project's quality checks are clean on changed files (e.g. ruff/ty for
+      Python, swiftlint for Swift, eslint/tsc for Node)
 ```
 
 ### Step 7 — Update the task `README.md` (optional, light)

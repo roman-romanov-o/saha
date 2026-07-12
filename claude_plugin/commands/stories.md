@@ -76,15 +76,22 @@ So that **[benefit]**.
 
 ## Acceptance Criteria
 
-Conditions that must be true for this story to be complete:
+Conditions that must be true for this story to be complete. Write each as a
+**checkbox** (the execution loop checks these off) and tag each with how it is
+verified:
 
-1. **Given** [initial context]
-   **When** [action is taken]
-   **Then** [expected outcome]
+- [ ] **AC-1:** Given [context], when [action], then [outcome]   <!-- verify: automated -->
+- [ ] **AC-2:** [criterion]   <!-- verify: build -->
+- [ ] **AC-3:** [criterion]   <!-- verify: manual: how a human confirms it -->
 
-2. **Given** [context]
-   **When** [action]
-   **Then** [outcome]
+<!--
+Verify method — pick the WEAKEST that still gives real confidence:
+  - automated (default if omitted): a headless test asserts it. Logic, APIs, data.
+  - build: it's enough that the project compiles/launches. "App builds", "module links".
+  - manual: <instructions>: no headless test can confirm it (UI rendering, visual
+    layout, drill-in feel). The loop routes it to a human and will NOT churn on it.
+Reserve manual for things a machine genuinely cannot check.
+-->
 
 ## Edge Cases
 

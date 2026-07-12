@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     runner: Literal["claude", "codex", "gemini", "mock"] = "claude"
     claude_model: str = "sonnet"
     claude_timeout: int = 300
+    # Budget for running the project's own test command (a real suite can far
+    # exceed the LLM call budget), kept separate from claude_timeout.
+    test_command_timeout: int = 600
     claude_dangerously_skip_permissions: bool = False
     codex_model: str | None = None
     codex_sandbox: Literal["read-only", "workspace-write", "danger-full-access"] = "workspace-write"

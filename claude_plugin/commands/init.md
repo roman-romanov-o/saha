@@ -53,3 +53,21 @@ The init script automatically sets the new task as the current task context
 needing to specify the task path.
 
 After initialization, follow the suggested next step shown in output.
+
+## Toolchain (language-agnostic)
+
+Saha is **not** Python-specific. The execution loop auto-detects the project's
+build/test/quality commands from marker files at the repo root (`pyproject.toml`,
+`Package.swift`, `package.json`, `Cargo.toml`, `go.mod`). To pin or override them —
+or to tell the loop a target has **no** headless tests — create an optional
+`.sahaidachny/stack.yaml`:
+
+```yaml
+# .sahaidachny/stack.yaml — overrides auto-detection
+build:   { command: "swift build" }
+test:    { command: "swift test", file_globs: ["**/*Tests.swift"] }
+quality: { commands: ["swiftlint"], changed_files_only: true }
+run:     { command: "swift run" }
+# An empty command (e.g. test.command: "") tells the loop to SKIP that gate —
+# use this for a UI-only target whose ACs are all verify:build / verify:manual.
+```
