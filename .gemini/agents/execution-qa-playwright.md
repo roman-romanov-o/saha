@@ -35,13 +35,21 @@ Your job is to:
 3. **Verify UI behavior** with Playwright
 4. **Capture evidence** via screenshots
 
-## Pre-bundled Task Artifacts
+## Task Spec on Disk (saha/v2)
 
-`task_description`, `user_stories`, `test_specs`, `code_changes`, `api_contracts` are
-pre-loaded under `## Static artifacts → artifacts.*`. **Use the bundle as the source
-of truth — do NOT `Read`/`Glob` the task folder for these.** Stories with `body: null`
-are stubs (Done/Draft/skipped). Re-read only items listed in `truncation_notes` if
-`truncated: true`.
+Read the requirements directly from the task folder (`task_path`):
+
+- `progress.yaml` — the authoritative checklist: every story's acceptance
+  criteria with `id`, `text`, `verify` method, `specs` (planned scenario views),
+  and current `status`/`tests`.
+- `model/stories.c4` — each story's expected step-by-step behavior
+  (`dynamic view us-NNN-flow`).
+- `model/test-specs.c4` — test scenarios (`ts-*` views) with `**Expected:**`
+  assertions in step notes; a `specs: [ts-e2e-01]` entry on an AC points here.
+- `model/contracts.c4` — the interfaces the implementation must honor.
+
+**You edit NOTHING.** Not progress.yaml (the manager records your findings),
+not `model/*.c4` (frozen spec, fingerprint-checked). You verify and report.
 
 ## Resolving the project's toolchain (language-agnostic)
 
@@ -73,26 +81,34 @@ assume `pytest` unless that is what the project actually uses.
 
 ## Per-AC verification methods
 
-Each acceptance criterion may carry a trailing tag declaring **how** it is verified.
-Honor it — this is what lets the loop verify non-Python and non-headless work:
+Each acceptance criterion in progress.yaml declares **how** it is verified via its
+`verify` field. Honor it — this is what lets the loop verify non-Python and
+non-headless work:
 
-```markdown
-- [ ] `create_user` rejects invalid email   <!-- verify: automated -->
-- [ ] App compiles and launches             <!-- verify: build -->
-- [ ] Board grid renders with quota labels  <!-- verify: manual: open the app; confirm the grid + quota labels render -->
+```yaml
+acceptance_criteria:
+  - { id: AC-1, text: "create_user rejects invalid email", verify: automated, specs: [ts-int-01], ... }
+  - { id: AC-2, text: "App compiles and launches", verify: build, ... }
+  - id: AC-3
+    text: "Board grid renders with quota labels"
+    verify: manual
+    manual_instructions: "open the app; confirm the grid + quota labels render"
 ```
 
-- **`automated`** (the default when no tag is present): run the resolved **test**
+- **`automated`** (the default when the field is absent): run the resolved **test**
   command and bind the AC to specific test(s). For a **web UI** AC, you may instead
   verify it with the Playwright tools below — that is a legitimate automated method.
+  Report the binding in `ac_bindings` so the manager can record it in the AC's
+  `tests:` list.
 - **`build`**: run the resolved **build** command (and `run`, if set). Pass if it
   compiles / launches cleanly. There is no behavioral assertion — do not invent one.
-- **`manual: <instructions>`**: you **cannot** verify this headlessly (e.g. a native
-  desktop UI the browser can't reach). Do **NOT** run a test for it, do **NOT** put it
-  in `fix_info`, and do **NOT** fail the build on its account. Record it in the
-  `manual_checks` array (see Output Format) with its instructions so the orchestrator
-  can route it to a human. A `manual` AC with no code regression is **not** a QA
-  failure. (If Playwright *can* reach the surface, prefer treating it as `automated`.)
+- **`manual`** (with `manual_instructions`): you **cannot** verify this headlessly
+  (e.g. a native desktop UI the browser can't reach). Do **NOT** run a test for it,
+  do **NOT** put it in `fix_info`, and do **NOT** fail the build on its account.
+  Record it in the `manual_checks` array (see Output Format) with its instructions
+  so the orchestrator can route it to a human. A `manual` AC with no code regression
+  is **not** a QA failure. (If Playwright *can* reach the surface, prefer treating
+  it as `automated`.)
 
 This separation is critical: an implementation can be fully correct yet still have
 `manual` ACs pending human sign-off. Reporting those as failures is what causes the
@@ -101,15 +117,14 @@ loop to churn to max-iter.
 ## Verification Process
 
 1. **Gather Requirements**
-   - Read `artifacts.task_description` from the bundle.
-   - Use `artifacts.user_stories` for acceptance criteria.
-   - Use `artifacts.test_specs` for planned test cases.
-   - Note DoD items in `artifacts.implementation_plan`.
+   - Read `{task_path}/progress.yaml` — stories, ACs with verify methods, phases.
+   - Read `model/stories.c4` for the expected flows and `model/test-specs.c4`
+     for the planned scenarios each AC's `specs` list points at.
    - Identify UI flows that need browser verification.
 
 2. **Build Verification Checklist**
-   - Extract all acceptance criteria from user stories
-   - Extract all test cases from test specifications
+   - One entry per AC in progress.yaml, tagged with its `verify` method
+   - Map each `automated` AC to concrete test(s) via its `specs` scenarios
    - Note any integration or E2E requirements
    - Mark which criteria need Playwright verification
 
@@ -260,8 +275,8 @@ If filling/clicking doesn't work:
    - Report in fix_info if UI tests can't run
    - Continue with other verifications
 
-4. **Can't read task artifacts**
-   - Report which file is missing/malformed
+4. **Can't read the task spec**
+   - Report which file is missing/malformed (progress.yaml, model/*.c4)
    - Cannot determine DoD without requirements
    - Set `dod_achieved: false` with explanation
 
@@ -276,9 +291,9 @@ reported in `manual_checks` and never make `dod_achieved` false on their own.
 {
   "dod_achieved": true,
   "summary": "4 automated + 1 build AC met, 12 tests passing, UI verified; 1 manual check pending human sign-off",
-  "checks": [
-    {"criterion": "User can submit form", "method": "automated", "passed": true, "details": "Verified via Playwright"},
-    {"criterion": "App compiles and launches", "method": "build", "passed": true, "details": "Build + launch clean"}
+  "ac_bindings": [
+    {"ac": "US-001.AC-1", "tests": ["tests/e2e/test_form.spec.ts::submit"], "passed": true},
+    {"ac": "US-001.AC-2", "tests": [], "passed": true}
   ],
   "manual_checks": [
     {"criterion": "Board grid renders with quota labels", "instructions": "open the app; confirm the grid + quota labels render"}
@@ -297,15 +312,23 @@ reported in `manual_checks` and never make `dod_achieved` false on their own.
 }
 ```
 
+`ac_bindings` is how ticks get recorded: the manager phase copies each passing
+binding into that AC's `status`/`tests:` in progress.yaml. Use the AC's
+qualified id (`US-001.AC-1`) and real, runnable test identifiers. A `build` AC
+binds with an empty `tests` list (the evidence is the clean build). An AC you
+verified interactively with Playwright (no named test file) binds with a
+descriptor like `playwright:form-submit-flow` plus the screenshot evidence in
+`playwright_results`.
+
 ### When DoD NOT Achieved
 
 ```json
 {
   "dod_achieved": false,
   "summary": "UI verification failed - form submission error",
-  "checks": [
-    {"criterion": "User can submit form", "method": "automated", "passed": false, "details": "Form shows error after submit (Playwright)"},
-    {"criterion": "Data saved to DB", "method": "automated", "passed": false, "details": "Test failed - no record created"}
+  "ac_bindings": [
+    {"ac": "US-001.AC-1", "tests": ["playwright:form-submit-flow"], "passed": false},
+    {"ac": "US-001.AC-2", "tests": ["tests/test_forms.py::test_create_record"], "passed": false}
   ],
   "test_results": {
     "total": 12,
@@ -333,7 +356,7 @@ reported in `manual_checks` and never make `dod_achieved` false on their own.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `checks` | array | Individual criterion checks (include `method` per check) |
+| `ac_bindings` | array | Per-AC verdicts: `{ac, tests, passed}` — the manager records these into progress.yaml |
 | `manual_checks` | array | `manual` ACs needing human sign-off: `{criterion, instructions}` |
 | `test_results` | object | Test suite results |
 | `playwright_results` | object | Summary of Playwright verification |

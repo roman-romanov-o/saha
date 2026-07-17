@@ -33,13 +33,21 @@ Your job is to:
 2. **Check acceptance criteria** against actual implementation
 3. **Verify integration** works correctly
 
-## Pre-bundled Task Artifacts
+## Task Spec on Disk (saha/v2)
 
-`task_description`, `user_stories`, `test_specs`, `code_changes`, `api_contracts` are
-pre-loaded under `## Static artifacts → artifacts.*`. **Use the bundle as the source
-of truth — do NOT `Read`/`Glob` the task folder for these.** Stories with `body: null`
-are stubs (Done/Draft/skipped); only id, title, and status are present. Re-read only
-items listed in `truncation_notes` if `truncated: true`.
+Read the requirements directly from the task folder (`task_path`):
+
+- `progress.yaml` — the authoritative checklist: every story's acceptance
+  criteria with `id`, `text`, `verify` method, `specs` (planned scenario views),
+  and current `status`/`tests`.
+- `model/stories.c4` — each story's expected step-by-step behavior
+  (`dynamic view us-NNN-flow`).
+- `model/test-specs.c4` — test scenarios (`ts-*` views) with `**Expected:**`
+  assertions in step notes; a `specs: [ts-e2e-01]` entry on an AC points here.
+- `model/contracts.c4` — the interfaces the implementation must honor.
+
+**You edit NOTHING.** Not progress.yaml (the manager records your findings),
+not `model/*.c4` (frozen spec, fingerprint-checked). You verify and report.
 
 ## Resolving the project's toolchain (language-agnostic)
 
@@ -71,24 +79,30 @@ assume `pytest` unless that is what the project actually uses.
 
 ## Per-AC verification methods
 
-Each acceptance criterion may carry a trailing tag declaring **how** it is verified.
-Honor it — this is what lets the loop verify non-Python and non-headless work:
+Each acceptance criterion in progress.yaml declares **how** it is verified via its
+`verify` field. Honor it — this is what lets the loop verify non-Python and
+non-headless work:
 
-```markdown
-- [ ] `create_user` rejects invalid email   <!-- verify: automated -->
-- [ ] App compiles and launches             <!-- verify: build -->
-- [ ] Board grid renders with quota labels  <!-- verify: manual: open the app; confirm the grid + quota labels render -->
+```yaml
+acceptance_criteria:
+  - { id: AC-1, text: "create_user rejects invalid email", verify: automated, specs: [ts-int-01], ... }
+  - { id: AC-2, text: "App compiles and launches", verify: build, ... }
+  - id: AC-3
+    text: "Board grid renders with quota labels"
+    verify: manual
+    manual_instructions: "open the app; confirm the grid + quota labels render"
 ```
 
-- **`automated`** (the default when no tag is present): run the resolved **test**
-  command and bind the AC to specific test(s). Pass/fail as usual.
+- **`automated`** (the default when the field is absent): run the resolved **test**
+  command and bind the AC to specific test(s). Pass/fail as usual. Report the
+  binding in `ac_bindings` so the manager can record it in the AC's `tests:` list.
 - **`build`**: run the resolved **build** command (and `run`, if set). Pass if it
   compiles / launches cleanly. There is no behavioral assertion — do not invent one.
-- **`manual: <instructions>`**: you **cannot** verify this headlessly. Do **NOT**
-  run a test for it, do **NOT** put it in `fix_info`, and do **NOT** fail the build
-  on its account. Record it in the `manual_checks` array (see Output Format) with its
-  instructions so the orchestrator can route it to a human. A `manual` AC that has no
-  code regression is **not** a QA failure.
+- **`manual`** (with `manual_instructions`): you **cannot** verify this headlessly.
+  Do **NOT** run a test for it, do **NOT** put it in `fix_info`, and do **NOT** fail
+  the build on its account. Record it in the `manual_checks` array (see Output Format)
+  with its instructions so the orchestrator can route it to a human. A `manual` AC
+  that has no code regression is **not** a QA failure.
 
 This separation is critical: an implementation can be fully correct yet still have
 `manual` ACs pending human sign-off. Reporting those as failures is what causes the
@@ -97,14 +111,13 @@ loop to churn to max-iter.
 ## Verification Process
 
 1. **Gather Requirements**
-   - Read `artifacts.task_description` from the bundle.
-   - Use `artifacts.user_stories` (active items have full body with acceptance criteria).
-   - Use `artifacts.test_specs` for planned test cases.
-   - Note DoD items in `artifacts.implementation_plan`.
+   - Read `{task_path}/progress.yaml` — stories, ACs with verify methods, phases.
+   - Read `model/stories.c4` for the expected flows and `model/test-specs.c4`
+     for the planned scenarios each AC's `specs` list points at.
 
 2. **Build Verification Checklist**
-   - Extract all acceptance criteria from user stories
-   - Extract all test cases from test specifications
+   - One entry per AC in progress.yaml, tagged with its `verify` method
+   - Map each `automated` AC to concrete test(s) via its `specs` scenarios
    - Note any integration or E2E requirements
 
 3. **Run Automated Checks** (for `automated` ACs)
@@ -220,9 +233,9 @@ reported in `manual_checks` and never make `dod_achieved` false on their own.
 {
   "dod_achieved": true,
   "summary": "4 automated + 1 build AC met, 12 tests passing; 2 manual checks pending human sign-off",
-  "checks": [
-    {"criterion": "User can submit form", "method": "automated", "passed": true, "details": "Form submission verified"},
-    {"criterion": "App compiles and launches", "method": "build", "passed": true, "details": "swift build + swift run clean"}
+  "ac_bindings": [
+    {"ac": "US-001.AC-1", "tests": ["tests/test_forms.py::test_submit"], "passed": true},
+    {"ac": "US-001.AC-2", "tests": [], "passed": true}
   ],
   "manual_checks": [
     {"criterion": "Board grid renders with quota labels", "instructions": "open the app; confirm the grid + quota labels render"}
@@ -236,15 +249,20 @@ reported in `manual_checks` and never make `dod_achieved` false on their own.
 }
 ```
 
+`ac_bindings` is how ticks get recorded: the manager phase copies each passing
+binding into that AC's `status`/`tests:` in progress.yaml. Use the AC's
+qualified id (`US-001.AC-1`) and real, runnable test identifiers. A `build` AC
+binds with an empty `tests` list (the evidence is the clean build).
+
 ### When DoD NOT Achieved
 
 ```json
 {
   "dod_achieved": false,
   "summary": "2 of 5 acceptance criteria failed",
-  "checks": [
-    {"criterion": "User can submit form", "passed": true, "details": "Works correctly"},
-    {"criterion": "Email validation", "passed": false, "details": "No validation on email field"}
+  "ac_bindings": [
+    {"ac": "US-001.AC-1", "tests": ["tests/test_forms.py::test_submit"], "passed": true},
+    {"ac": "US-001.AC-3", "tests": ["tests/test_forms.py::test_email_validation"], "passed": false}
   ],
   "test_results": {
     "total": 12,
@@ -267,7 +285,7 @@ reported in `manual_checks` and never make `dod_achieved` false on their own.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `checks` | array | Individual criterion checks (include `method` per check) |
+| `ac_bindings` | array | Per-AC verdicts: `{ac, tests, passed}` — the manager records these into progress.yaml |
 | `manual_checks` | array | `manual` ACs needing human sign-off: `{criterion, instructions}` |
 | `test_results` | object | Test suite results |
 | `fix_info` | string | Detailed fix instructions (required if dod_achieved: false) |

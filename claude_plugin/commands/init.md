@@ -6,7 +6,8 @@ allowed-tools: Bash
 
 # Initialize Sahaidachny Task
 
-Create a new hierarchical task structure for planning.
+Create a new task in **saha/v2 format**: the plan is authored as a LikeC4 model the
+human reviews visually; all tracking lives in one machine-readable `progress.yaml`.
 
 > For a **small** change (1-2 files), use `/saha:quick "<one-line task>"` instead —
 > it plans in one pass and hands straight off to `/saha:execute`.
@@ -28,18 +29,28 @@ This creates:
 
 ```
 {base_path}/task-XX-{name}/
-├── README.md                    # Task dashboard
-├── user-stories/README.md
-├── design-decisions/README.md
-├── code-changes/README.md
-├── implementation-plan/README.md
-├── test-specs/
-│   ├── README.md
-│   ├── e2e/README.md
-│   ├── integration/README.md
-│   └── unit/README.md
-└── research/README.md
+├── README.md            # 5-line human pointer (no state here)
+├── progress.yaml        # THE tracking file (format: saha/v2)
+├── model/
+│   └── spec.c4          # shared LikeC4 element kinds/tags for this task
+└── research/            # research prose stays markdown
 ```
+
+Planning commands then grow the model:
+
+| Step | Command | Writes |
+|------|---------|--------|
+| Research | `/saha:research` | `research/*.md` |
+| Task Description | `/saha:task` | `model/task.c4` (view `task-context`) |
+| User Stories | `/saha:stories` | `model/stories.c4` (dynamic views `us-NNN-flow`) + `progress.yaml` stories |
+| Design Decisions | `/saha:decide` | `model/decisions.c4` (view `decisions`) |
+| Code Changes | `/saha:contracts` | `model/contracts.c4` (view `contracts`) |
+| Test Specs | `/saha:test-specs` | `model/test-specs.c4` (views `ts-*`) |
+| Implementation Plan | `/saha:plan` | `model/phases.c4` (view `phases`) + `progress.yaml` phases |
+| Verify | `/saha:verify` | validation only |
+
+**The two-file rule:** `model/*.c4` is the frozen spec (never edited after execution
+starts); `progress.yaml` is the only file any status update ever touches.
 
 ## Example Usage
 
@@ -71,3 +82,6 @@ run:     { command: "swift run" }
 # An empty command (e.g. test.command: "") tells the loop to SKIP that gate —
 # use this for a UI-only target whose ACs are all verify:build / verify:manual.
 ```
+
+Rendering the model needs the LikeC4 CLI (`npm i -g likec4`); without it the plan
+is still reviewable as source, and ghostling degrades gracefully.

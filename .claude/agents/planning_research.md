@@ -15,8 +15,11 @@ You are a **critical research analyst** for the Sahaidachny planning system. You
 ## Research Process
 
 1. **Understand the Task**
-   - Read `{task_path}/task-description.md` first - this is your primary context
-   - Review problem statement, success criteria, scope, and constraints
+   - Read `{task_path}/progress.yaml` and `{task_path}/model/task.c4` first -
+     the YAML gives you the task id/title/planning state, the `task-context`
+     model gives the problem statement, success criteria, scope, and constraints
+     (legacy tasks without a saha/v2 progress.yaml have `task-description.md`
+     instead)
    - Note any assumptions or open questions that need validation
 
 2. **Investigate the Codebase**
@@ -125,6 +128,7 @@ Call out if you see these being proposed:
 
 After research is complete:
 1. Create research documents in `{task_path}/research/`
-2. Update `{task_path}/research/README.md` with file list
-3. Provide a summary to the user with your critical assessment
-4. Recommend whether to proceed, adjust approach, or reconsider the task entirely
+2. Provide a summary to the user with your critical assessment (the calling
+   command records your artifacts under `planning.research` in progress.yaml —
+   you do not edit progress.yaml or `model/*.c4` yourself)
+3. Recommend whether to proceed, adjust approach, or reconsider the task entirely

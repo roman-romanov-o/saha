@@ -27,9 +27,16 @@ incomplete phase. All subagent calls run in this session (subscription-billed).
    user the task already finished and exit. For `completed_pending_manual`, print the
    pending manual checklist from `state.context.pending_manual_checks` so they still
    see what needs human sign-off. Show `state.error_message` if present.
-4. **Ensure the toolchain is resolved**: if `state.context.stack` is missing (older
+4. **Validate the task is saha/v2**: `state.task_path` must contain `progress.yaml`
+   with `format: saha/v2`. If not, this state predates the v2 format — tell the user
+   to re-run with the legacy path (`saha resume`) or re-plan, and stop.
+5. **Ensure the toolchain is resolved**: if `state.context.stack` is missing (older
    state file), run Step 0 of `/saha:execute` to resolve and stash it before
    continuing. Likewise ensure `state.context.pending_manual_checks` exists (default `[]`).
+6. **Ensure the spec fingerprint exists**: if `state.context.spec_fingerprint` is
+   missing, compute it now (`cd <task_path> && shasum model/*.c4`) and stash it,
+   noting in your output that spec-freeze integrity is only tracked from this
+   resume point onward.
 
 ### Step 2 — Determine resume point
 

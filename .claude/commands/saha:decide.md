@@ -1,12 +1,14 @@
 ---
 description: Document architectural and design decisions
 argument-hint: [task-path] [--title=<decision-title>]
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, WebSearch, Task, mcp__context7__resolve-library-id, mcp__context7__query-docs
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, WebSearch, Task, mcp__context7__resolve-library-id, mcp__context7__query-docs
 ---
 
 # Design Decisions
 
-Document architectural decisions and their rationale (ADR format).
+Document architectural decisions and their rationale as **LikeC4 decision elements**
+wired to the components they shape (`model/decisions.c4`). The reviewer sees each
+decision NEXT TO what it affects — not in a separate ADR document.
 
 ## Arguments
 
@@ -15,11 +17,11 @@ Document architectural decisions and their rationale (ADR format).
     1. Current task from `.sahaidachny/current-task` (set via `saha use`)
     2. Most recent task folder in `docs/tasks/`
   - If no context found, asks the user
-- `--title=<title>`: Create a specific decision document
+- `--title=<title>`: Create a specific decision
 
 ## Prerequisites
 
-- Task folder must exist
+- Task folder must exist (with `model/task.c4`)
 - User stories should be defined (for context)
 
 ## Execution
@@ -27,8 +29,8 @@ Document architectural decisions and their rationale (ADR format).
 ### 1. Identify Decision Points
 
 Review existing artifacts for decisions that need documenting:
-- `{task_path}/task-description.md` - Constraints and technical context
-- `{task_path}/user-stories/*.md` - Technical notes and questions
+- `{task_path}/model/task.c4` - Constraints and technical context
+- `{task_path}/model/stories.c4` + `{task_path}/progress.yaml` - Stories and open questions
 - `{task_path}/research/*.md` - Identified risks and recommendations
 
 Look for:
@@ -59,119 +61,49 @@ For each decision, gather through conversation:
 
 Use Context7 and WebSearch to research options if needed.
 
-### 4. Create Decision Files
+### 4. Author Decision Elements
 
-Create `{task_path}/design-decisions/DD-XXX-{slug}.md`:
+Add each decision to `{task_path}/model/decisions.c4`
+(following `.claude/templates/decisions.c4`):
 
-```markdown
-# DD-XXX: [Decision Title]
+```likec4
+model {
+  dd-001 = decision 'DD-001: {title}' {
+    description '''
+      **Context:** {problem that motivates this decision}
 
-**Status:** Proposed | Accepted | Deprecated | Superseded
-**Date:** YYYY-MM-DD
-**Deciders:** [Who made this decision]
-
-## Context
-
-[Why is this decision necessary? What problem are we solving?]
-
-### Constraints
-
-- [Constraint that affects this decision]
-- [Another constraint]
-
-### Requirements
-
-- [Requirement this decision must satisfy]
-
-## Options Considered
-
-### Option 1: [Name]
-
-**Description:** [How this option works]
-
-**Pros:**
-- [Advantage]
-- [Another advantage]
-
-**Cons:**
-- [Disadvantage]
-- [Another disadvantage]
-
-**Effort:** Low | Medium | High
-
-### Option 2: [Name]
-
-**Description:** [...]
-
-**Pros:**
-- [...]
-
-**Cons:**
-- [...]
-
-**Effort:** [...]
-
-### Option 3: [Name]
-
-[...]
-
-## Decision
-
-**Chosen Option:** [Option N - Name]
-
-### Rationale
-
-[Why this option was selected over others]
-
-### Key Factors
-
-1. [Most important factor in the decision]
-2. [Second factor]
-3. [...]
-
-## Consequences
-
-### Positive
-
-- [Good outcome of this decision]
-- [Another benefit]
-
-### Negative
-
-- [Trade-off we're accepting]
-- [Technical debt or limitation]
-
-### Neutral
-
-- [Change that's neither good nor bad]
-
-## Implementation Notes
-
-[Guidance for implementing this decision]
-
-```
-[Code example if helpful]
+      **Decision:** {what we are doing}
+    '''
+    metadata {
+      status 'accepted'          // proposed | accepted | superseded
+      rationale '{why this beats the alternatives}'
+      alternatives '{alt 1 — why rejected}; {alt 2 — why rejected}'
+      consequences '{positive}; {negative trade-offs accepted}'
+      stories 'US-001; US-002'
+    }
+  }
+  dd-001 -> sys.affected_part 'shapes'
+}
 ```
 
-## Related
+Rules:
+- element id `dd-NNN` — referenced from `progress.yaml` stories[].decisions
+- Draw a `-> 'shapes'` relation to **every component the decision constrains**
+  (that's the reviewable payoff: the decision sits on the diagram next to its
+  blast radius). Add `-> external 'chooses'` for technology picks.
+- Be honest in `alternatives`/`consequences` — a decision with no rejected
+  alternatives and no negative consequences is a description, not a decision.
+- Maintain the `decisions` view: include every `dd-*` and the components they shape.
 
-- **Task:** [Link to task-description.md]
-- **Stories:** [US-XXX, US-YYY that this affects]
-- **Supersedes:** [DD-XXX if replacing another decision]
-- **Related Decisions:** [DD-XXX other related decisions]
-- **Architecture Views:** [view ids in `docs/architecture/` affected by this decision, e.g. `task-03-quota-flow`; omit if the decision doesn't touch the model]
+Then update the affected stories' `decisions:` lists in `{task_path}/progress.yaml`.
 
-## References
+### 5. Update the Project Architecture Model (LikeC4)
 
-- [External documentation]
-- [Research that informed this]
-```
-
-### 5. Update the Architecture Model (LikeC4)
-
-`/saha:decide` is the **only writer** of the project architecture model:
-`docs/architecture/*.c4` (LikeC4 DSL). One model per project, many views —
-never a model per task, never copies of the model into task folders.
+Separate from the task model: `/saha:decide` is also the **only writer** of the
+project-wide architecture model `docs/architecture/*.c4`. One model per project,
+many views — never a model per task, never copies of the model into task folders.
+(The task's `model/` describes THIS task's slice; `docs/architecture/` describes
+the whole system.)
 
 For each decision that is **genuinely architectural** (new component, new
 boundary, new external system — not local design choices):
@@ -180,7 +112,7 @@ boundary, new external system — not local design choices):
    a requirement — LikeC4 merges all `*.c4` files in the directory):
    - `model.c4` — elements: systems, containers, components
    - `views.c4` — views over the model
-2. Update `model.c4`/`views.c4` **in the same pass** as the DD doc.
+2. Update `model.c4`/`views.c4` **in the same pass** as the decision element.
 3. View naming:
    - Evergreen views keep stable ids: `index` (landscape), `context`, one per
      container.
@@ -188,43 +120,24 @@ boundary, new external system — not local design choices):
      and show the slice of architecture this task changes. Keep them after the
      task ships (they document *why* the architecture looks like this); prune
      only when they stop rendering against the current model.
-4. Record the affected view ids in the DD doc's `**Architecture Views:**` line.
+4. Record the affected view ids in the decision's `metadata { arch_views '…' }`.
 
 Skip this step entirely when the decision isn't architectural, or when the
 user declines the model — planning works identically without it. Never touch
 the model for local design choices.
 
-### 6. Update Design Decisions README
+### 6. Compile Gate + Progress
 
-Update `{task_path}/design-decisions/README.md`:
-
-```markdown
-# Design Decisions
-
-Architectural decisions and their rationale.
-
-## Contents
-
-| ID | Title | Status | Date |
-|----|-------|--------|------|
-| DD-001 | [Title] | Accepted | YYYY-MM-DD |
-| DD-002 | [Title] | Proposed | YYYY-MM-DD |
-
-## Decision Log
-
-### Accepted
-- DD-001: [Title] - [One-line summary]
-
-### Proposed
-- DD-002: [Title] - [One-line summary]
-
-### Deprecated
-_None_
+```bash
+likec4 validate {task_path}/model
 ```
 
-### 7. Update Task README
+Fix any errors, then update `{task_path}/progress.yaml`:
 
-Update progress table in `{task_path}/README.md`.
+```yaml
+planning:
+  design_decisions: { status: done, views: [decisions] }
+```
 
 ## Decision Quality Checklist
 
@@ -235,8 +148,9 @@ Good decisions:
 - [ ] Acknowledge trade-offs honestly
 - [ ] Are reversible or state the cost of reversal
 - [ ] Reference supporting research
+- [ ] Are wired to every component they constrain
 
-## 8. Review Artifacts
+## 7. Review Artifacts
 
 Launch the reviewer agent to validate design decisions:
 
@@ -249,7 +163,7 @@ Task tool:
 
     Review mode: decide
     Task path: {task_path}
-    Artifacts to review: {task_path}/design-decisions/DD-*.md
+    Artifacts to review: {task_path}/model/decisions.c4
 
     Review the design decisions and report any issues.
 ```
@@ -262,3 +176,10 @@ If the reviewer finds blockers (🔴), revisit the decision before proceeding.
 /saha:decide docs/tasks/task-01-auth
 /saha:decide --title="Authentication Strategy"
 ```
+
+## Output
+
+Creates or updates:
+- `{task_path}/model/decisions.c4` (view `decisions`)
+- `docs/architecture/*.c4` (only for genuinely architectural decisions)
+- `{task_path}/progress.yaml` (stories[].decisions + planning.design_decisions)

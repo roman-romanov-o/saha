@@ -11,9 +11,9 @@ and hand straight off to the execution loop. This collapses the full planning
 chain (`init → task → research → stories → verify → plan`) into one generation of
 the *minimum* artifacts `/saha:execute` needs:
 
-- a short `task-description.md`,
-- one `user-stories/US-001.md` whose acceptance criteria **are** the Definition of Done,
-- one `implementation-plan/phase-01.md`.
+- a minimal task model (`model/task.c4` + one story flow in `model/stories.c4`),
+- `progress.yaml` with **one story whose acceptance criteria are the Definition
+  of Done** and **exactly one phase**.
 
 This command is **plan-only**. It does NOT write product code, does NOT run the
 execution loop, and does NOT launch a `planning_reviewer` pass. When it finishes
@@ -38,9 +38,9 @@ it tells you to run `/saha:execute`.
   Do **not** create any folder or artifact.
 - **Scope looks large.** If the description clearly spans many components (e.g.
   "rewrite the auth system", "migrate the whole DB layer", several unrelated
-  deliverables), still produce a single collapsed plan, but add a note at the top
-  of `task-description.md` and in your final message that the scope looks large
-  and the full planning flow (`/saha:init` … `/saha:plan`) may fit better.
+  deliverables), still produce a single collapsed plan, but note in the task
+  model's description and in your final message that the scope looks large and
+  the full planning flow (`/saha:init` … `/saha:plan`) may fit better.
 
 ## Execution recipe
 
@@ -106,133 +106,83 @@ script. Derive a short slug from the task description for the task name:
 bash .claude/scripts/init_task.sh "<short-slug-from-description>" --path=<path or docs/tasks>
 ```
 
-This creates `docs/tasks/task-XX-<slug>/` with the standard subfolders and writes
-`.sahaidachny/current-task`. Capture the created `task-XX-<slug>` id and its path
-from the script output (it prints `Created task folder:` and `Task ID:`).
+This creates the saha/v2 layout (`model/spec.c4`, `progress.yaml`, `research/`)
+and writes `.sahaidachny/current-task`. Capture the created `task-XX-<slug>` id
+and its path from the script output (it prints `Created task folder:` and
+`Task ID:`).
 
-### Step 4 — Write `task-description.md`
+### Step 4 — Write the minimal task model
 
-Overwrite `<task_path>/task-description.md` with a **short** description grounded
-in the scan. Keep it tight — this is a small task. Include:
+Create `<task_path>/model/task.c4`: the actor, the `sys` container, and ONLY the
+components the scan found affected (tag `#existing`/`#new`,
+`metadata { files '…' }` with the real paths), plus `view task-context`. Keep it
+tiny — a quick task's model is a handful of elements. Note "Planned via
+/saha:quick" and any scope-looks-large warning in the container description.
 
-```markdown
-# Task Description: <Title derived from the one-line task>
+Create `<task_path>/model/stories.c4`: one `us-001 = story` element and one
+`dynamic view us-001-flow` (3-5 steps: trigger → change → observable outcome),
+citing the AC ids in step notes.
 
-**Task ID:** TASK-XX
-**Status:** Ready
-**Last Updated:** <today's date YYYY-MM-DD>
-**Planned via:** /saha:quick (lightweight single-pass)
+If `likec4` is on PATH, run `likec4 validate <task_path>/model` and fix errors;
+if absent, note it and continue.
 
-> [Only if scope looks large] **Note:** this looks larger than a typical quick
-> task; the full planning flow (`/saha:init` … `/saha:plan`) may fit better.
+### Step 5 — Fill `progress.yaml` (the Definition of Done)
 
-## Problem Statement
+Edit `<task_path>/progress.yaml` (init created the skeleton). US-001's
+**acceptance criteria are the Definition of Done** — the execution loop parses
+this file, nothing else:
 
-<1-3 sentences: what the user asked for, restated.>
+```yaml
+status: planning
+planning:
+  task_description:    { status: done, views: [task-context] }
+  user_stories:        { status: done, views: [us-001-flow] }
+  design_decisions:    { status: skipped }
+  code_changes:        { status: skipped }
+  test_specs:          { status: skipped }
+  implementation_plan: { status: done, views: [] }
+  verify:              { status: skipped }
 
-## Affected Components
+stories:
+  - id: US-001
+    title: "<short title>"
+    view: us-001-flow
+    priority: must
+    status: ready
+    story: "As a developer, I want <the change>, so that <the benefit>."
+    acceptance_criteria:
+      - { id: AC-1, text: "<concrete outcome, real files from the scan>", verify: automated, status: pending, specs: [], tests: [] }
+      - { id: AC-2, text: "<concrete outcome>", verify: build, status: pending, specs: [], tests: [] }
+      - { id: AC-3, text: "Tests and quality checks pass on the changed files (<detected stack commands>)", verify: automated, status: pending, specs: [], tests: [] }
+    edge_cases: []
+    depends_on: []
+    decisions: []
 
-- `<real/path/from/scan>` - <how it's affected>
-- <... only real paths found in Step 2; if none, say "New area — no existing files">
-
-## Success Criteria
-
-1. [ ] <the change is implemented in the files above>
-2. [ ] <tests/quality checks pass>
-```
-
-### Step 5 — Write `user-stories/US-001.md` (the Definition of Done)
-
-Overwrite `<task_path>/user-stories/US-001.md`. Its **acceptance criteria are the
-Definition of Done** — the execution QA/DoD agents parse the `[ ]` checkboxes and
-the `**Status:**` line, so these conventions are mandatory:
-
-```markdown
-# US-001: <Short title for the change>
-
-**Priority:** Must Have
-**Status:** Ready
-**Persona:** Developer
-
-## User Story
-
-As a developer, I want <the change>, so that <the benefit>.
-
-## Acceptance Criteria
-
-- [ ] <Concrete, verifiable outcome 1, referencing the real files from the scan>   <!-- verify: automated -->
-- [ ] <Concrete, verifiable outcome 2>   <!-- verify: automated -->
-- [ ] <Concrete, verifiable outcome 3>   <!-- verify: build -->
-- [ ] The project's tests and quality checks pass on the changed files   <!-- verify: automated -->
+phases:
+  - id: phase-01
+    title: "<short phase name>"
+    view: phases
+    stories: [US-001]
+    status: pending
+    steps:
+      - { name: "<what to change>", files: [<real/path/from/scan>], status: pending }
 ```
 
 Rules:
 
-- Emit **2-5** acceptance criteria. Each must be concrete and verifiable, grounded
-  in the files found in Step 2. Avoid vague items the loop can't check.
-- Always include a final AC for "tests + quality checks pass" so the verify loop
-  has a quality target. Phrase it for the **detected stack** (e.g. "pytest + ruff/ty
-  clean" for Python, "swift test + swiftlint clean" for Swift) — do not hardcode
-  Python tools unless the project is Python.
-- **Tag each AC with a verify method** (`<!-- verify: automated|build|manual: ... -->`):
-  `automated` (default) for anything a headless test asserts; `build` for "it
-  compiles/launches"; `manual: <how a human checks it>` for UI rendering / visual
-  things no headless test can confirm. Manual ACs end the loop in
-  `completed_pending_manual` for human sign-off instead of churning to max-iter.
-- Use `- [ ]` checkboxes (the parsers also accept `- [x]`/`- [~]`) and the literal
-  `**Status:**` line. Do not omit them.
+- Emit **2-5** acceptance criteria. Each must be concrete and verifiable,
+  grounded in the files found in Step 2. Avoid vague items the loop can't check.
+- Always include a final AC for "tests + quality checks pass", phrased for the
+  **detected stack** — do not hardcode Python tools unless the project is Python.
+- **Set each AC's `verify` method**: `automated` (default) for anything a
+  headless test asserts; `build` for "it compiles/launches"; `manual` +
+  `manual_instructions` for UI rendering / visual things no headless test can
+  confirm. Manual ACs end the loop in `completed_pending_manual` for human
+  sign-off instead of churning to max-iter.
+- Quick mode always produces exactly one phase; no `model/phases.c4` needed
+  (leave `implementation_plan.views: []`).
 
-### Step 6 — Write `implementation-plan/phase-01.md`
-
-Overwrite `<task_path>/implementation-plan/phase-01.md` with **exactly one** phase
-(quick mode always produces a single phase):
-
-```markdown
-# Phase 01: <Short phase name> ✓ pending
-
-**Status:** Not Started
-**Estimated Effort:** S
-**Dependencies:** None
-
-## Objective
-
-<1-2 sentences on what this phase delivers.>
-
-## Scope
-
-### Stories Included
-
-| Story | Priority | Complexity | Status |
-|-------|----------|------------|--------|
-| US-001 | Must Have | S | [ ] |
-
-## Implementation Steps
-
-### Step 1: <Component>
-
-**Files to Create/Modify:**
-- `<real/path/from/scan>` - <what changes>
-
-**Acceptance Criteria:**
-- [ ] <maps to a US-001 AC>
-
-## Definition of Done
-
-Phase is complete when ALL of the following are true:
-
-- [ ] All US-001 automated/build acceptance criteria are checked (manual ACs go to
-      human sign-off — they don't block completion)
-- [ ] The project's tests pass (per the detected stack / `.sahaidachny/stack.yaml`)
-- [ ] The project's quality checks are clean on changed files (e.g. ruff/ty for
-      Python, swiftlint for Swift, eslint/tsc for Node)
-```
-
-### Step 7 — Update the task `README.md` (optional, light)
-
-If `<task_path>/README.md` exists, you may set its Overview to the one-line task.
-Don't spend effort here — the loop doesn't depend on it.
-
-### Step 8 — Stop and hand off (do NOT execute)
+### Step 6 — Stop and hand off (do NOT execute)
 
 Print a short summary and stop. Do **not** start `/saha:execute`, do **not** write
 product code, do **not** launch any reviewer agent. End with the next step:
@@ -241,7 +191,7 @@ product code, do **not** launch any reviewer agent. End with the next step:
 ═══════════════════════════════════════════════
 SAHA QUICK — plan ready (single pass)
   Task: <task-XX-slug>  (now the current task)
-  Artifacts: task-description.md, user-stories/US-001.md, implementation-plan/phase-01.md
+  Artifacts: model/task.c4, model/stories.c4, progress.yaml
   [if scope looked large] Note: scope looks large — full planning may fit better.
 
   Next step: /saha:execute
@@ -254,8 +204,8 @@ SAHA QUICK — plan ready (single pass)
   separate review-and-approve step. The verification you keep is the *execution*
   loop (test-critique → QA → code-quality → DoD), which runs later under
   `/saha:execute`.
-- **Reuses the loop unchanged.** The artifacts use the same `[ ]` / `**Status:**`
-  conventions the execution agents already parse, so `/saha:execute` runs and
+- **Reuses the loop unchanged.** The story/AC/phase records use the same
+  progress.yaml schema the execution agents parse, so `/saha:execute` runs and
   terminates cleanly with no agent changes.
 - **Quick = small scope, not greenfield.** This is the path for *small changes in
   an existing codebase*. Greenfield vs. existing codebase is a separate axis; the

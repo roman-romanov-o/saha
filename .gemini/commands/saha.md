@@ -15,16 +15,20 @@ SMALL TASKS (one command, in Claude Code):
 
 PLANNING COMMANDS — large tasks (in Claude Code):
 
-  /saha:init <name>    Initialize new task folder
-  /saha:research       Deep codebase exploration
-  /saha:task           Define task description
-  /saha:stories        Generate user stories
-  /saha:decide         Document decision points
-  /saha:contracts      Define code changes
-  /saha:test-specs     Create test specifications
-  /saha:verify <item>  Verify planning artifacts
-  /saha:plan           Generate execution plan
-  /saha:status         Check planning progress
+  /saha:init <name>    Initialize new task folder (LikeC4 model + progress.yaml)
+  /saha:research       Deep codebase exploration (research/*.md)
+  /saha:task           Task description model (model/task.c4)
+  /saha:stories        User stories as step-by-step flows (model/stories.c4)
+  /saha:decide         Design decisions (model/decisions.c4)
+  /saha:contracts      Code-change contracts (model/contracts.c4)
+  /saha:test-specs     Test scenarios as flows (model/test-specs.c4)
+  /saha:plan           Phased plan (model/phases.c4 + progress.yaml)
+  /saha:verify         Compile + cross-reference the whole plan
+  /saha:status         Check planning progress (reads progress.yaml)
+
+  The plan is a LikeC4 model — review it visually in ghostling's Planning
+  Mode (a static `likec4 build` of `<task>/model` — never `likec4 start`). All tracking lives in the
+  task's progress.yaml; model/*.c4 freezes once execution starts.
 
 EXECUTION COMMANDS (in Claude Code — subscription-billed):
 

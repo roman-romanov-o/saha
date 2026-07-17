@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Initialize a new Sahaidachny task folder structure
+# Initialize a new Sahaidachny task folder (format saha/v2: LikeC4 model + progress.yaml)
 #
 # Usage:
 #   ./init_task.sh <task-name> [--path=docs/tasks]
@@ -83,150 +83,56 @@ TITLE=$(echo "$TASK_NAME" | sed 's/[-_]/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupp
 # Get today's date
 TODAY=$(date +%Y-%m-%d)
 
-# Create folder structure
-mkdir -p "$TASK_PATH"
-mkdir -p "$TASK_PATH/user-stories"
-mkdir -p "$TASK_PATH/implementation-plan"
-mkdir -p "$TASK_PATH/test-specs/e2e"
-mkdir -p "$TASK_PATH/test-specs/integration"
-mkdir -p "$TASK_PATH/test-specs/unit"
+# Create folder structure: model/ holds the LikeC4 spec, research/ holds prose.
+mkdir -p "$TASK_PATH/model"
 mkdir -p "$TASK_PATH/research"
-mkdir -p "$TASK_PATH/design-decisions"
-mkdir -p "$TASK_PATH/code-changes"
 
-# Create main README
+# spec.c4 is placeholder-free — install it verbatim so `likec4 build model/`
+# is green from the very first commit.
+if [[ -f "$TEMPLATE_DIR/spec.c4" ]]; then
+    cp "$TEMPLATE_DIR/spec.c4" "$TASK_PATH/model/spec.c4"
+fi
+
+# Research prose template (research stays markdown).
+if [[ -f "$TEMPLATE_DIR/research-report.md" ]]; then
+    cp "$TEMPLATE_DIR/research-report.md" "$TASK_PATH/research/_TEMPLATE_research-report.md"
+fi
+
+# progress.yaml — THE single mutable tracking file (see templates/progress.yaml for
+# the full documented schema). Starts minimal: all planning steps pending.
+cat > "$TASK_PATH/progress.yaml" << PROGEOF
+format: saha/v2
+task: "${FOLDER_NAME}"
+title: "${TITLE}"
+created: "${TODAY}"
+mode: full
+status: planning
+
+planning:
+  research:            { status: pending, artifacts: [] }
+  task_description:    { status: pending, views: [] }
+  user_stories:        { status: pending, views: [] }
+  design_decisions:    { status: pending, views: [] }
+  code_changes:        { status: pending, views: [] }
+  test_specs:          { status: pending, views: [] }
+  implementation_plan: { status: pending, views: [] }
+  verify:              { status: pending }
+
+stories: []
+phases: []
+iterations: []
+PROGEOF
+
+# Human pointer only — ALL state lives in progress.yaml, the spec in model/*.c4.
 cat > "$TASK_PATH/README.md" << MAINEOF
 # ${TASK_ID_UPPER}: ${TITLE}
 
-**Status:** Planning
-**Created:** ${TODAY}
+Saha v2 task — the plan is a LikeC4 model, tracking is machine-readable.
 
-## Overview
-
-[TODO: Add 1-2 sentence summary of the task]
-
-## Planning Progress
-
-| Step | Status | Artifacts |
-|------|--------|-----------|
-| Research | Pending | research/*.md |
-| Task Description | Pending | task-description.md |
-| User Stories | Pending | user-stories/US-*.md |
-| Design Decisions | Pending | design-decisions/DD-*.md |
-| Code Changes | Pending | code-changes/*.md |
-| Test Specs | Pending | test-specs/**/*.md |
-| Implementation Plan | Pending | implementation-plan/phase-*.md |
-
-## Next Steps
-
-- [ ] Run \`/saha:research\` to explore the codebase
-- [ ] Run \`/saha:task\` to create task description
+- **Review the plan:** open this task in ghostling (Planning Mode), which renders a static \`likec4 build\` of \`model/\`
+- **State:** \`progress.yaml\` (single source of truth — do not track status anywhere else)
+- **Spec:** \`model/*.c4\` (frozen once execution starts)
 MAINEOF
-
-# Create subdirectory READMEs
-cat > "$TASK_PATH/user-stories/README.md" << 'EOF'
-# User Stories
-
-User stories define features from the user's perspective.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/implementation-plan/README.md" << 'EOF'
-# Implementation Plan
-
-Phased execution plan with steps and dependencies.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/research/README.md" << 'EOF'
-# Research
-
-Technical research and codebase analysis.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/test-specs/README.md" << 'EOF'
-# Test Specifications
-
-Test specs organized by type.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/test-specs/e2e/README.md" << 'EOF'
-# End-to-End Tests
-
-E2E test specifications.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/test-specs/integration/README.md" << 'EOF'
-# Integration Tests
-
-Integration test specifications.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/test-specs/unit/README.md" << 'EOF'
-# Unit Tests
-
-Unit test specifications.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/design-decisions/README.md" << 'EOF'
-# Design Decisions
-
-Architectural decisions and their rationale.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-cat > "$TASK_PATH/code-changes/README.md" << 'EOF'
-# Code Changes
-
-Interface definitions and API specifications.
-
-## Contents
-
-_No artifacts yet._
-EOF
-
-# Copy templates (if template directory exists)
-if [[ -d "$TEMPLATE_DIR" ]]; then
-    [[ -f "$TEMPLATE_DIR/task-description.md" ]] && cp "$TEMPLATE_DIR/task-description.md" "$TASK_PATH/_TEMPLATE_task-description.md"
-    [[ -f "$TEMPLATE_DIR/user-story.md" ]] && cp "$TEMPLATE_DIR/user-story.md" "$TASK_PATH/user-stories/_TEMPLATE_user-story.md"
-    [[ -f "$TEMPLATE_DIR/research-report.md" ]] && cp "$TEMPLATE_DIR/research-report.md" "$TASK_PATH/research/_TEMPLATE_research-report.md"
-    [[ -f "$TEMPLATE_DIR/implementation-phase.md" ]] && cp "$TEMPLATE_DIR/implementation-phase.md" "$TASK_PATH/implementation-plan/_TEMPLATE_phase.md"
-    [[ -f "$TEMPLATE_DIR/test-spec-e2e.md" ]] && cp "$TEMPLATE_DIR/test-spec-e2e.md" "$TASK_PATH/test-specs/e2e/_TEMPLATE_test-spec.md"
-    [[ -f "$TEMPLATE_DIR/test-spec-integration.md" ]] && cp "$TEMPLATE_DIR/test-spec-integration.md" "$TASK_PATH/test-specs/integration/_TEMPLATE_test-spec.md"
-    [[ -f "$TEMPLATE_DIR/test-spec-unit.md" ]] && cp "$TEMPLATE_DIR/test-spec-unit.md" "$TASK_PATH/test-specs/unit/_TEMPLATE_test-spec.md"
-    [[ -f "$TEMPLATE_DIR/design-decision.md" ]] && cp "$TEMPLATE_DIR/design-decision.md" "$TASK_PATH/design-decisions/_TEMPLATE_design-decision.md"
-    [[ -f "$TEMPLATE_DIR/code-change-rest.md" ]] && cp "$TEMPLATE_DIR/code-change-rest.md" "$TASK_PATH/code-changes/_TEMPLATE_code-change-rest.md"
-    [[ -f "$TEMPLATE_DIR/code-change-event.md" ]] && cp "$TEMPLATE_DIR/code-change-event.md" "$TASK_PATH/code-changes/_TEMPLATE_code-change-event.md"
-fi
 
 # Set as current task context
 mkdir -p ".sahaidachny" && echo "${FOLDER_NAME}" > ".sahaidachny/current-task"
