@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **AC-quality guardrails (mechanism & persona leaks)**: acceptance criteria must state an observable outcome, not an implementation mechanism (library/API/internal-fn/`*.ts`/trigger name) or test mechanics (mocks, fixtures) — the "how" belongs in a design decision cited via `decisions:`, the test detail in `model/test-specs.c4`. A developer/system persona story must be tagged `kind: enabler` with a `so that` that names the downstream user value. The **AC-QUALITY CONTRACT** and **PERSONA / ENABLER RULE** are declared in the `progress.yaml` template header and cross-referenced from `stories.c4`; `/saha:verify` §5b lints them (heuristic scan + judgment), and `V2TaskVerifier` enforces them deterministically: an untagged enabler persona is a hard failure, an AC whose text names a mechanism/test tell is a warning. Adds a `kind` field (`story | enabler`) to the story schema.
+
 ## [0.11.0] - 2026-07-19
 
 ### Added

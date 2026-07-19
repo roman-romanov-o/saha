@@ -8,6 +8,14 @@
 //   - Acceptance criteria LIVE in progress.yaml (id, verify method, bound tests).
 //     Cite AC ids in step `notes` so the reviewer sees WHERE each AC is proven,
 //     but never duplicate their status here.
+//   - AC QUALITY (enforced in progress.yaml, see its AC-QUALITY CONTRACT): an AC is
+//     an OBSERVABLE OUTCOME, never an implementation mechanism (no library/API/
+//     internal-fn/*.ts name) and never test mechanics (mocks, fixtures). The "how"
+//     is a DD; the test detail is test-specs.c4. Step `notes` here narrate the flow
+//     and may name real elements/contracts, but AC text stays behavioural.
+//   - PERSONA: `story` = an end user / business actor whose value the `so that`
+//     states. A developer/system persona is an ENABLER — set `kind: enabler` in
+//     progress.yaml and make `so that` name the downstream user capability it unlocks.
 //   - Steps reference elements declared in task.c4 / contracts.c4 (or add missing
 //     participants here). Use `<-` for responses, `parallel {}` for concurrency.
 //   - Every static view that shows a story CARD (task-context, phases) must attach

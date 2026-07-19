@@ -44,8 +44,9 @@ stories:
     title: Reverse strings
     view: us-001-flow
     priority: must
+    kind: enabler
     status: ready
-    story: "As a developer, I want reverse_string so that I can flip text."
+    story: "As a developer, I want a reverse_string helper so that users can flip text in the app."
     acceptance_criteria:
       - id: AC-1
         text: "reverse_string returns the reversed input"
@@ -242,6 +243,30 @@ def test_verifier_warns_on_unknown_decision_reference(v2_task, no_likec4):
     assert result.status == VerificationStatus.WARNINGS
     warning_names = {c.name for c in result.checks if c.is_warning}
     assert "decision references" in warning_names
+
+
+def test_verifier_fails_on_untagged_enabler_persona(v2_task, no_likec4):
+    # Drop the `kind: enabler` tag: a developer-persona story left as a plain
+    # story is the leak the PERSONA/ENABLER rule blocks.
+    _mutate_progress(v2_task, "kind: enabler\n    status: ready", "status: ready")
+    result = V2TaskVerifier(v2_task).verify("task-42-v2-test")
+    assert result.status == VerificationStatus.FAILED
+    failed_names = {c.name for c in result.checks if not c.passed and not c.is_warning}
+    assert "AC quality (persona)" in failed_names, failed_names
+
+
+def test_verifier_warns_on_mechanism_leak_in_ac_text(v2_task, no_likec4):
+    # An AC that names an implementation mechanism (arrayUnion) instead of the
+    # observable outcome is a soft warning, not a blocker.
+    _mutate_progress(
+        v2_task,
+        'text: "reverse_string returns the reversed input"',
+        'text: "the entry is appended via arrayUnion"',
+    )
+    result = V2TaskVerifier(v2_task).verify("task-42-v2-test")
+    assert result.status == VerificationStatus.WARNINGS
+    warning_names = {c.name for c in result.checks if c.is_warning}
+    assert "AC quality (mechanism)" in warning_names, warning_names
 
 
 # ---------------------------------------------------------------------------

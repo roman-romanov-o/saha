@@ -12,6 +12,8 @@ Python port of the gates in ``claude_plugin/commands/verify.md``:
   every story has a ts-e2e-* spec or a declared test_specs gap.
 - Unfilled ``{{…}}`` template placeholders are an error (v2 replaces the
   legacy delete-the-file cleanup, which must not touch v2 folders).
+- AC quality: a developer/system persona story without ``kind: enabler`` is a
+  failure; an AC whose text names an implementation/test mechanism warns.
 
 Reuses the legacy checker's CheckResult/VerificationResult shapes so the
 command layer renders both formats identically.
@@ -47,6 +49,20 @@ VALID_TASK_STATUSES = {"planning", "executing", "completed", "completed_pending_
 VALID_VERIFY_METHODS = {"automated", "build", "manual"}
 _LIKEC4_TIMEOUT_SECONDS = 120
 
+# AC-QUALITY CONTRACT (see claude_plugin/commands/verify.md 5b + templates/progress.yaml).
+# An AC states an observable OUTCOME; it must not name an implementation mechanism
+# (a library/API/internal-fn/trigger/*.ts) or test mechanics (mocks, fixtures).
+_AC_MECHANISM_PATTERN = re.compile(
+    r"arrayUnion|arrayRemove|esbuild|webpack|read-modify-write|getFirestore"
+    r"|collection\(|\.ts\b|on[A-Z][A-Za-z]+(?:Written|Created|Updated|Deleted)"
+    r"|httpsCallable|connectFunctionsEmulator|mock|stub|fixture|harness|green test",
+    re.IGNORECASE,
+)
+# A developer/system persona is an ENABLER, not a user story — it must set kind: enabler.
+_ENABLER_PERSONA_PATTERN = re.compile(
+    r"^as a (?:backend |frontend )?(?:developer|dev|system|engineer)\b", re.IGNORECASE
+)
+
 
 class V2TaskVerifier:
     """Verifies a saha/v2 task folder is ready for execution."""
@@ -68,6 +84,7 @@ class V2TaskVerifier:
             self._check_cross_references(progress, sources)
             self._check_e2e_coverage(progress)
             self._check_template_placeholders(sources)
+            self._check_ac_quality(progress)
         return VerificationResult(
             task_id=task_id,
             task_path=self.task_path,
@@ -222,6 +239,40 @@ class V2TaskVerifier:
             )
         else:
             self._ok("template placeholders", "no unfilled template placeholders")
+
+    def _check_ac_quality(self, progress: ProgressFile) -> None:
+        """AC-QUALITY CONTRACT + PERSONA/ENABLER rule (verify.md 5b).
+
+        An untagged enabler persona is a hard failure (structural, precise).
+        A mechanism/test-mechanic tell in AC text is a warning — the regex flags
+        candidates, so it surfaces the smell without blocking on a false positive.
+        """
+        untagged_enablers = [
+            story.id
+            for story in progress.stories
+            if _ENABLER_PERSONA_PATTERN.match(story.story.strip()) and story.kind != "enabler"
+        ]
+        mechanism_leaks = [
+            f"{story.id}.{ac.id}"
+            for story in progress.stories
+            for ac in story.acceptance_criteria
+            if _AC_MECHANISM_PATTERN.search(ac.text)
+        ]
+        if untagged_enablers:
+            self._fail(
+                "AC quality (persona)",
+                "developer/system persona without kind: enabler — " + ", ".join(untagged_enablers),
+            )
+        else:
+            self._ok("AC quality (persona)", "no untagged enabler personas")
+        if mechanism_leaks:
+            self._warn(
+                "AC quality (mechanism)",
+                "AC text names an implementation/test mechanism (state the outcome, move the "
+                "'how' to a DD): " + ", ".join(mechanism_leaks),
+            )
+        else:
+            self._ok("AC quality (mechanism)", "AC text is free of mechanism/test tells")
 
     # ------------------------------------------------------------------
     # Bookkeeping

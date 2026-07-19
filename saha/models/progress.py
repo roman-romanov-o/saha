@@ -57,6 +57,7 @@ class StoryProgress(BaseModel):
     title: str = ""
     view: str | None = None  # dynamic view id in model/stories.c4
     priority: str = "must"  # must | should | could
+    kind: str = "story"  # story | enabler (enabler = developer/system persona)
     status: str = "draft"  # draft | ready | in_progress | done
     story: str = ""
     acceptance_criteria: list[AcceptanceCriterion] = Field(default_factory=list)
