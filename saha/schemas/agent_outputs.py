@@ -4,13 +4,15 @@ These schemas define the expected JSON output from each execution agent.
 Used by the orchestrator to validate agent responses.
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from saha.models.result import ManualCheck
 
-class ImplementationStatus(str, Enum):
+
+class ImplementationStatus(StrEnum):
     """Status codes for implementation agent."""
 
     SUCCESS = "success"
@@ -59,8 +61,14 @@ class QACheck(BaseModel):
     criterion: str = Field(description="The acceptance criterion being checked")
     passed: bool = Field(description="Whether the criterion passed")
     details: str = Field(description="Details about the check")
+    method: str | None = Field(
+        default=None,
+        description="Verification method declared by the AC: automated, build, or manual",
+    )
     verification_method: str | None = Field(
-        default=None, description="How the criterion was verified (pytest, playwright, manual)"
+        default=None,
+        description="Concrete tool used to verify (e.g. resolved test command, playwright). "
+        "Retained for backward compatibility with older agent outputs.",
     )
 
 
@@ -76,12 +84,19 @@ class TestResults(BaseModel):
 class QAOutput(BaseModel):
     """Output schema for execution-qa agent."""
 
-    dod_achieved: bool = Field(description="True only if ALL criteria pass")
+    dod_achieved: bool = Field(
+        description="True only if all automated and build criteria pass. "
+        "Manual criteria do not affect this flag."
+    )
     summary: str = Field(description="Brief status summary")
     checks: list[QACheck] | None = Field(default=None, description="Individual criterion checks")
     test_results: TestResults | None = Field(default=None, description="Test suite results")
     fix_info: str | None = Field(
         default=None, description="Detailed fix instructions (required if dod_achieved: false)"
+    )
+    manual_checks: list[ManualCheck] | None = Field(
+        default=None,
+        description="Acceptance criteria deferred to human sign-off (verify:manual)",
     )
 
 
@@ -101,7 +116,7 @@ class QAPlaywrightOutput(QAOutput):
     )
 
 
-class ManagerStatus(str, Enum):
+class ManagerStatus(StrEnum):
     """Status codes for manager agent."""
 
     SUCCESS = "success"
@@ -141,7 +156,7 @@ class ManagerOutput(BaseModel):
     notes: str | None = Field(default=None, description="Observations about progress or issues")
 
 
-class DoDConfidence(str, Enum):
+class DoDConfidence(StrEnum):
     """Confidence levels for DoD determination."""
 
     HIGH = "high"
@@ -225,7 +240,7 @@ class CodeQualityOutput(BaseModel):
     )
 
 
-class TestQualityScore(str, Enum):
+class TestQualityScore(StrEnum):
     """Test quality grades."""
 
     A = "A"

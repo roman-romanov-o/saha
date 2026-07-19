@@ -10,10 +10,12 @@ Checks include:
 
 import logging
 import re
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel
+
+from saha.models.progress import is_v2_task
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ ACCEPTANCE_CRITERIA_SECTION = re.compile(
 )
 
 
-class VerificationStatus(str, Enum):
+class VerificationStatus(StrEnum):
     """Overall verification result status."""
 
     PASSED = "passed"
@@ -723,6 +725,12 @@ def cleanup_template_artifacts(task_path: Path) -> CleanupResult:
         CleanupResult with list of removed files.
     """
     removed_files: list[str] = []
+
+    # saha/v2 tasks: markdown is research prose, never template residue —
+    # deleting research/*.md that legitimately contains {{…}} would destroy
+    # planning artifacts. The v2 verifier reports placeholders instead.
+    if is_v2_task(task_path):
+        return CleanupResult(removed_files=[], total_removed=0)
 
     # Scan all markdown files in the task directory
     for md_file in task_path.rglob("*.md"):

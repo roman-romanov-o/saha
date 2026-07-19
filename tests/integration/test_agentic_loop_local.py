@@ -177,7 +177,7 @@ class TestAgenticLoopLocal:
 
     def test_full_loop_execution_success(self, temp_project, state_manager):
         """Test a complete successful loop execution."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=0,
@@ -218,7 +218,7 @@ class TestAgenticLoopLocal:
 
     def test_loop_qa_failure_and_recovery(self, temp_project, state_manager):
         """Test that QA failures trigger fix loops."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=2,  # Fail QA twice before passing
@@ -265,7 +265,7 @@ class TestAgenticLoopLocal:
 
     def test_loop_code_quality_failure_and_recovery(self, temp_project, state_manager):
         """Test that code quality failures trigger fix loops."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=0,
@@ -302,7 +302,7 @@ class TestAgenticLoopLocal:
 
     def test_max_iterations_respected(self, temp_project, state_manager):
         """Test that the loop stops at max iterations."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=100,  # Always fail QA
@@ -336,7 +336,7 @@ class TestAgenticLoopLocal:
 
     def test_state_persistence_and_loading(self, temp_project, state_manager):
         """Test that state is properly saved and can be loaded."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=0,
@@ -373,7 +373,7 @@ class TestAgenticLoopLocal:
 
     def test_hooks_triggered_correctly(self, temp_project, state_manager):
         """Test that hooks are triggered at appropriate points."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=0,
@@ -411,7 +411,7 @@ class TestAgenticLoopLocal:
 
     def test_context_passed_to_agents(self, temp_project, state_manager):
         """Test that agents receive correct context variables."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=0,
@@ -447,7 +447,7 @@ class TestAgenticLoopLocal:
 
     def test_manager_receives_iteration_artifacts(self, temp_project, state_manager):
         """Test that manager gets concrete iteration evidence in prompt + context."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=0,
@@ -499,7 +499,7 @@ class TestAgenticLoopLocal:
 
     def test_fix_info_passed_on_failure(self, temp_project, state_manager):
         """Test that fix_info is passed to implementation agent on retry."""
-        settings = Settings(runner="mock")
+        settings = Settings(runner="mock", state_dir=temp_project / ".sahaidachny")
         runner = IntelligentMockRunner(
             working_dir=temp_project,
             fail_qa_count=1,  # Fail once to trigger retry
@@ -704,7 +704,11 @@ def test_token_usage_logged_for_each_stage(monkeypatch, tmp_path: Path) -> None:
         def get_name(self) -> str:
             return "token-mock"
 
-    settings = Settings(runner="mock", agents_path=Path("claude_plugin/agents"))
+    settings = Settings(
+        runner="mock",
+        agents_path=Path("claude_plugin/agents"),
+        state_dir=tmp_path / ".sahaidachny",
+    )
     runner = TokenMockRunner()
     tools = create_default_registry()
     hooks = HookRegistry()

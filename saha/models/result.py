@@ -1,13 +1,13 @@
 """Result models for subagents and tools."""
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ResultStatus(str, Enum):
+class ResultStatus(StrEnum):
     """Status of a result."""
 
     SUCCESS = "success"
@@ -70,6 +70,26 @@ class QACheckResult(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManualCheck(BaseModel):
+    """An acceptance criterion deferred to human sign-off (verify:manual)."""
+
+    criterion: str
+    instructions: str = ""
+
+
+class ACBinding(BaseModel):
+    """QA-reported binding of an acceptance criterion to concrete tests.
+
+    ``ac`` is the qualified id (US-001.AC-2); ``tests`` are runnable test
+    identifiers proven this iteration. The manager copies passed bindings
+    into progress.yaml's ``tests:`` lists — QA reports, only the manager writes.
+    """
+
+    ac: str
+    tests: list[str] = Field(default_factory=list)
+    passed: bool = False
+
+
 class QAResult(BaseModel):
     """Result from QA subagent."""
 
@@ -79,6 +99,8 @@ class QAResult(BaseModel):
     fix_info: str | None = None
     test_output: str = ""
     script_outputs: dict[str, str] = Field(default_factory=dict)
+    manual_checks: list[ManualCheck] = Field(default_factory=list)
+    ac_bindings: list[ACBinding] = Field(default_factory=list)
 
     @property
     def all_checks_passed(self) -> bool:

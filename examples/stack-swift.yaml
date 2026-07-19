@@ -1,0 +1,51 @@
+# Swift / AppKit desktop-app stack profile for Sahaidachny.
+#
+# Copy this file to your Swift project's `.sahaidachny/stack.yaml` and adjust
+# the commands to match your build system. It overrides saha's auto-detection
+# (which keys off `Package.swift`) so the execution loop knows exactly how to
+# build, test, lint, and launch a GUI app whose behaviour is mostly verified by
+# a human rather than by headless tests.
+#
+# RESOLUTION: saha deep-merges this file ON TOP of the auto-detected Swift
+# defaults. Any field you omit keeps its detected value; any field you set wins.
+# An EMPTY command ("" or []) means "SKIP that gate" — the loop will not invent
+# a tool, and a skipped test gate will not block completion.
+
+language: swift
+
+# How the loop compiles the project. For a Swift Package Manager app this is
+# `swift build`; for an Xcode project, point it at xcodebuild, e.g.
+#   build: { command: "xcodebuild -scheme MyApp -destination 'platform=macOS' build" }
+build:
+  command: "swift build"
+
+# Headless tests. A pure AppKit GUI app often has FEW or NO XCTest targets —
+# its real acceptance criteria are visual. Two options:
+#
+#   (a) You DO have XCTest unit tests for the non-UI layers (recommended):
+test:
+  command: "swift test"
+  file_globs:
+    - "**/*Tests.swift"
+    - "**/Tests/**/*.swift"
+#
+#   (b) The target is UI-only with no headless tests — SKIP the gate instead so
+#       the loop never churns trying to auto-verify visual behaviour. Replace
+#       the `test:` block above with:
+#   test:
+#     command: ""        # empty => skip; rely on verify:build / verify:manual ACs
+#     file_globs: []
+
+# Linters / type / style checks run on changed files. swiftlint is the common
+# choice; drop to `commands: []` to skip the quality gate entirely.
+quality:
+  commands:
+    - "swiftlint"
+  changed_files_only: true
+
+# How to launch the built artifact. Used by `verify: build` acceptance criteria
+# (the loop confirms the app builds and launches cleanly, without asserting
+# pixel-level behaviour). For an Xcode app you might instead `open` the .app:
+#   run: { command: "open ./.build/release/MyApp.app" }
+run:
+  command: "swift run"

@@ -1,14 +1,19 @@
 """Main agentic loop orchestrator."""
 
 import logging
+import shlex
 import signal
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from saha.config.settings import Settings
+from saha.config.stack import StackProfile, load_stack_profile
 from saha.hooks.registry import HookRegistry
 from saha.logging import (
     console,
@@ -23,8 +28,11 @@ from saha.logging import (
     log_task_stopped,
     log_token_usage,
 )
+from saha.models.progress import is_v2_task
 from saha.models.result import (
+    ACBinding,
     CodeQualityResult,
+    ManualCheck,
     QAResult,
     ResultStatus,
     SubagentResult,
@@ -34,9 +42,12 @@ from saha.models.state import ExecutionState, LoopPhase, PhaseTokenUsage, StepSt
 from saha.orchestrator.artifact_bundler import ArtifactBundler, ArtifactView
 from saha.orchestrator.plan_progress import PlanProgressUpdater
 from saha.orchestrator.state import StateManager
+from saha.orchestrator.v2_artifact_bundler import V2ArtifactBundler
+from saha.orchestrator.v2_progress import V2ProgressUpdater
 from saha.runners.base import Runner, RunnerResult
 from saha.runners.registry import RunnerRegistry
 from saha.tools.registry import ToolRegistry
+from saha.verification.fingerprint import compute_model_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -124,15 +135,56 @@ class AgenticLoop:
         self._state_manager = state_manager
         self._settings = settings
         self._bundler: ArtifactBundler | None = None
+        self._stack: StackProfile | None = None
+
+    def _get_stack(self) -> StackProfile:
+        """Resolve (and cache) the project's stack profile.
+
+        Markers and ``.sahaidachny/stack.yaml`` live in the parent of the
+        configured state directory (the repo root for a default setup).
+        """
+        if self._stack is None:
+            self._stack = load_stack_profile(self._settings.state_dir.parent)
+        return self._stack
+
+    def _init_stack_context(self, state: ExecutionState) -> None:
+        """Resolve the stack profile and seed stack-related context.
+
+        Injects the resolved toolchain so verifier subagents don't re-detect
+        it, and initialises the accumulator for deferred manual checks.
+        """
+        stack = self._get_stack()
+        state.context["stack"] = stack.to_context()
+        state.context.setdefault("pending_manual_checks", [])
+        self._seed_model_fingerprint(state)
+        console.print(
+            f"[task]  Stack: {stack.language} "
+            f"(test: {stack.test.command or 'skip'}, build: {stack.build.command or 'skip'})[/task]"
+        )
+        self._state_manager.save(state)
+
+    def _seed_model_fingerprint(self, state: ExecutionState) -> None:
+        """Record the frozen-spec fingerprint for a v2 task at kickoff.
+
+        The DoD gate recomputes it before accepting completion — any edit
+        to model/*.c4 during execution blocks the task from completing.
+        """
+        if not is_v2_task(state.task_path):
+            return
+        fingerprint = compute_model_fingerprint(state.task_path)
+        if fingerprint:
+            state.context["model_fingerprint"] = fingerprint
 
     def _get_bundler(self, task_path: Path) -> ArtifactBundler:
         """Get the artifact bundler, creating one for this task path if needed.
 
         The bundler is cached per task_path so its mtime-keyed file cache
         survives across phases of the same iteration (and across iterations).
+        saha/v2 tasks (progress.yaml + model/*.c4) get the v2 bundler.
         """
         if self._bundler is None or self._bundler.task_path != task_path:
-            self._bundler = ArtifactBundler(task_path)
+            bundler_cls = V2ArtifactBundler if is_v2_task(task_path) else ArtifactBundler
+            self._bundler = bundler_cls(task_path)
         return self._bundler
 
     def _base_context(
@@ -151,6 +203,7 @@ class AgenticLoop:
             "task_id": config.task_id,
             "task_path": str(config.task_path),
             "iteration": state.current_iteration,
+            "stack": self._get_stack().to_context(),
             "artifacts": artifacts.model_dump(exclude_none=True, mode="json"),
         }
 
@@ -230,6 +283,7 @@ class AgenticLoop:
             max_iterations=config.max_iterations,
             enabled_tools=config.enabled_tools or self._tools.list_available(),
         )
+        self._init_stack_context(state)
 
         console.print(f"\n[task]{'═' * 50}[/task]")
         console.print(f"[task]▶ STARTING TASK: {config.task_id}[/task]")
@@ -266,7 +320,11 @@ class AgenticLoop:
         if state is None:
             raise LoopError(f"No saved state found for task: {task_id}")
 
-        if state.current_phase in (LoopPhase.COMPLETED, LoopPhase.FAILED):
+        if state.current_phase in (
+            LoopPhase.COMPLETED,
+            LoopPhase.COMPLETED_PENDING_MANUAL,
+            LoopPhase.FAILED,
+        ):
             raise LoopError(f"Task {task_id} is already {state.current_phase.value}")
 
         logger.info(f"Resuming loop for task: {task_id} at phase: {state.current_phase}")
@@ -282,7 +340,12 @@ class AgenticLoop:
 
     def _should_continue(self, state: ExecutionState) -> bool:
         """Check if the loop should continue."""
-        if state.current_phase in (LoopPhase.COMPLETED, LoopPhase.FAILED, LoopPhase.STOPPED):
+        if state.current_phase in (
+            LoopPhase.COMPLETED,
+            LoopPhase.COMPLETED_PENDING_MANUAL,
+            LoopPhase.FAILED,
+            LoopPhase.STOPPED,
+        ):
             return False
 
         if state.current_iteration >= state.max_iterations:
@@ -343,7 +406,8 @@ class AgenticLoop:
         config: LoopConfig,
     ) -> tuple[PlanProgressUpdater | None, Path | None]:
         """Select the active implementation phase for progress updates."""
-        updater = PlanProgressUpdater(config.task_path)
+        updater_cls = V2ProgressUpdater if is_v2_task(config.task_path) else PlanProgressUpdater
+        updater = updater_cls(config.task_path)
         selection = updater.select_active_phase(state)
         if selection is None:
             return None, None
@@ -452,6 +516,9 @@ class AgenticLoop:
 
         # Phase 3: QA Verification
         qa_result = self._run_qa(state, config, impl_result, plan_updater, plan_phase_path)
+        # Accumulate manual checks regardless of DoD outcome: a failing iteration
+        # may still surface verify:manual ACs that later passes won't re-report.
+        self._accumulate_manual_checks(state, qa_result.manual_checks)
         if not qa_result.dod_achieved:
             # Loop back with fix info
             state.context["fix_info"] = qa_result.fix_info
@@ -526,7 +593,7 @@ class AgenticLoop:
         # Phase 6: DoD Check
         task_complete = self._run_dod_check(state, config, plan_updater, plan_phase_path)
         if task_complete:
-            self._state_manager.mark_completed(state)
+            self._finalize_completion(state)
 
         iteration.completed_at = datetime.now()
         log_iteration_complete(
@@ -538,6 +605,46 @@ class AgenticLoop:
         self._hooks.trigger("iteration_complete", state=state, iteration=iteration)
 
         return state
+
+    def _accumulate_manual_checks(
+        self, state: ExecutionState, manual_checks: list[ManualCheck]
+    ) -> None:
+        """Merge new manual checks into state, deduplicated by criterion."""
+        if not manual_checks:
+            return
+        pending: list[dict[str, str]] = state.context.setdefault("pending_manual_checks", [])
+        seen = {entry["criterion"] for entry in pending}
+        for check in manual_checks:
+            if check.criterion not in seen:
+                pending.append(check.model_dump())
+                seen.add(check.criterion)
+        self._state_manager.save(state)
+
+    def _finalize_completion(self, state: ExecutionState) -> None:
+        """Mark the task complete, routing to pending-manual when needed.
+
+        If any ``verify:manual`` criteria are still awaiting human sign-off the
+        task lands in ``COMPLETED_PENDING_MANUAL`` (a success state) and we emit
+        the verification checklist instead of declaring done.
+        """
+        pending = state.context.get("pending_manual_checks") or []
+        if pending:
+            self._state_manager.mark_completed_pending_manual(state)
+            self._print_manual_checklist(pending)
+        else:
+            self._state_manager.mark_completed(state)
+
+    @staticmethod
+    def _print_manual_checklist(pending: list[dict[str, str]]) -> None:
+        """Print the human verification checklist for deferred manual checks."""
+        console.print("\n[task]── MANUAL VERIFICATION REQUIRED ──[/task]")
+        console.print(
+            "[task]Code is complete. The following acceptance criteria need human sign-off:[/task]"
+        )
+        for entry in pending:
+            console.print(f"  [ ] {entry['criterion']}")
+            if entry.get("instructions"):
+                console.print(f"      ↳ {entry['instructions']}")
 
     def _run_manager_on_iteration_stop(
         self,
@@ -799,7 +906,8 @@ class AgenticLoop:
         files: list[str],
     ) -> str:
         """Build the prompt for the test critique agent."""
-        test_files = [f for f in files if "test" in f.lower() or f.endswith("_test.py")]
+        stack = self._get_stack()
+        test_files = [f for f in files if stack.is_test_file(f)]
         prod_files = [f for f in files if f not in test_files]
 
         parts = [
@@ -898,11 +1006,8 @@ class AgenticLoop:
         self._record_phase_usage(state, LoopPhase.QA, agent_name, runner, result, started_at)
         log_token_usage("QA Verification", result.token_usage, result.tokens_used)
 
-        # Run pytest if enabled
-        test_output = ""
-        if "pytest" in state.enabled_tools:
-            pytest_result = self._tools.run_tool("pytest", config.task_path)
-            test_output = pytest_result.stdout
+        # Capture test output using the project's resolved test command
+        test_output = self._capture_test_output(state, config)
 
         if result.success:
             # Parse structured output for DoD status
@@ -914,6 +1019,8 @@ class AgenticLoop:
             fix_info = (
                 result.structured_output.get("fix_info") if result.structured_output else None
             )
+            manual_checks = self._extract_manual_checks(result.structured_output)
+            ac_bindings = self._extract_ac_bindings(result.structured_output)
 
             self._state_manager.complete_phase(state, LoopPhase.QA)
             self._update_plan_progress(
@@ -931,6 +1038,8 @@ class AgenticLoop:
                 dod_achieved=dod_achieved,
                 fix_info=fix_info or result.output if not dod_achieved else None,
                 test_output=test_output,
+                manual_checks=manual_checks,
+                ac_bindings=ac_bindings,
             )
         else:
             self._update_plan_progress(
@@ -947,6 +1056,75 @@ class AgenticLoop:
                 dod_achieved=False,
                 fix_info=result.error,
             )
+
+    def _capture_test_output(self, state: ExecutionState, config: LoopConfig) -> str:
+        """Run the project's resolved test command and capture its output.
+
+        Empty test command means the stack opted out of a test gate, so we
+        capture nothing. For Python we reuse the venv-aware pytest tool when
+        available; any other language runs the command via a subprocess.
+        """
+        stack = self._get_stack()
+        command = stack.test.command
+        if not command:
+            return ""
+        argv = shlex.split(command)
+        if stack.language == "python" and "pytest" in state.enabled_tools and argv[0] == "pytest":
+            # Honor stack.yaml overrides (e.g. "pytest -x -q") via extra_args.
+            tool_config = {"verbose": False, "extra_args": argv[1:]}
+            return self._tools.run_tool("pytest", config.task_path, config=tool_config).stdout
+        return self._run_test_command(command)
+
+    def _run_test_command(self, command: str) -> str:
+        """Execute a shell test command, returning combined stdout+stderr.
+
+        Runs in the stack root (the directory whose markers resolved this
+        command), never the inherited cwd — inheriting it can point the suite
+        at an unrelated repo (e.g. saha itself under test, which recurses).
+        """
+        try:
+            completed = subprocess.run(
+                shlex.split(command),
+                capture_output=True,
+                text=True,
+                timeout=self._settings.test_command_timeout,
+                cwd=self._settings.state_dir.parent,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.warning(f"Test command '{command}' could not run: {e}")
+            return f"Test command '{command}' could not run: {e}"
+        return (completed.stdout or "") + (completed.stderr or "")
+
+    @staticmethod
+    def _extract_manual_checks(structured_output: dict[str, Any] | None) -> list[ManualCheck]:
+        """Pull deferred ``verify:manual`` checks out of a QA agent's output."""
+        if not structured_output:
+            return []
+        raw = structured_output.get("manual_checks") or []
+        checks: list[ManualCheck] = []
+        for item in raw:
+            if isinstance(item, dict) and item.get("criterion"):
+                checks.append(
+                    ManualCheck(
+                        criterion=item["criterion"],
+                        instructions=item.get("instructions", ""),
+                    )
+                )
+        return checks
+
+    @staticmethod
+    def _extract_ac_bindings(structured_output: dict[str, Any] | None) -> list[ACBinding]:
+        """Pull QA-reported AC→test bindings (saha/v2) out of structured output."""
+        if not structured_output:
+            return []
+        raw = structured_output.get("ac_bindings") or []
+        bindings: list[ACBinding] = []
+        for item in raw:
+            try:
+                bindings.append(ACBinding.model_validate(item))
+            except ValidationError:
+                logger.debug(f"Skipping malformed ac_binding entry: {item!r}")
+        return bindings
 
     def _run_code_quality(
         self,
@@ -990,12 +1168,12 @@ class AgenticLoop:
         if not all_files:
             logger.warning("No files_changed info from implementation, will scan task path")
 
+        stack = self._get_stack()
         context = self._base_context(state, config, ArtifactView.CODE_QUALITY)
         context["files_changed"] = files_changed
         context["files_added"] = files_added
-        context["enabled_tools"] = [
-            t for t in state.enabled_tools if t in ("ruff", "ty", "complexity")
-        ]
+        context["quality_commands"] = stack.quality.commands
+        context["changed_files_only"] = stack.quality.changed_files_only
 
         prompt = self._build_code_quality_prompt(state, config, all_files)
         log_agent_prompt("Code Quality", prompt)
@@ -1084,10 +1262,18 @@ class AgenticLoop:
             parts.extend(f"  - {f}" for f in files)
         else:
             parts.append("No file list provided — analyze recent changes in the task directory.")
+
+        commands = self._get_stack().quality.commands
+        if commands:
+            parts.append("")
+            parts.append("Run the project's quality commands on these files:")
+            parts.extend(f"  - {c}" for c in commands)
+        else:
+            parts.append("")
+            parts.append("No quality commands configured for this stack — skip linting and pass.")
         parts.extend(
             [
-                "",
-                "Run ruff, ty, complexipy on these files. Filter false positives and pre-existing issues. "
+                "Filter false positives and pre-existing issues. "
                 "Only fail for genuine problems in the changed code.",
                 'Return JSON: {"quality_passed": true/false, "fix_info": "..." if failed}',
             ]
@@ -1218,6 +1404,9 @@ class AgenticLoop:
             "quality_blocking_issues": (
                 quality_result.blocking_issues_count if quality_result else None
             ),
+            "qa_ac_bindings": (
+                [b.model_dump() for b in qa_result.ac_bindings] if qa_result else None
+            ),
         }
         if impl_result and impl_result.structured_output:
             iteration_artifacts["implementation_structured_output"] = impl_result.structured_output
@@ -1230,6 +1419,22 @@ class AgenticLoop:
         }
         context["iteration_artifacts"] = iteration_artifacts
         return context
+
+    def _model_fingerprint_intact(self, state: ExecutionState, config: LoopConfig) -> bool:
+        """Refuse v2 completion when the frozen model/*.c4 changed mid-execution."""
+        seeded = state.context.get("model_fingerprint")
+        if not seeded:
+            return True
+        current = compute_model_fingerprint(config.task_path)
+        if current == seeded:
+            return True
+        logger.error(
+            "DoD integrity gate: model/*.c4 fingerprint changed during execution "
+            f"(seeded {seeded[:12]}…, now {(current or 'missing')[:12]}…). "
+            "The frozen spec must not be edited mid-run; refusing completion."
+        )
+        log_phase_failed("DoD Check", "frozen model/*.c4 was modified during execution")
+        return False
 
     def _run_dod_check(
         self,
@@ -1291,6 +1496,19 @@ class AgenticLoop:
             status = "complete" if task_complete else "incomplete"
             remaining = result.structured_output.get("remaining_items", [])
 
+            if task_complete and not self._model_fingerprint_intact(state, config):
+                self._update_plan_progress(
+                    plan_updater,
+                    plan_phase_path,
+                    LoopPhase.DOD_CHECK,
+                    "failed",
+                    state.current_iteration,
+                    note="model fingerprint mismatch — frozen spec was edited",
+                    update_status_line=False,
+                )
+                self._state_manager.complete_phase(state, LoopPhase.DOD_CHECK)
+                return False
+
             if task_complete:
                 log_phase_complete("DoD Check", f"Task status: {status}")
                 self._update_plan_progress(
@@ -1341,6 +1559,14 @@ class AgenticLoop:
         if state.current_phase == LoopPhase.COMPLETED:
             log_task_complete(state.task_id, state.current_iteration)
             self._hooks.trigger("loop_complete", state=state)
+        elif state.current_phase == LoopPhase.COMPLETED_PENDING_MANUAL:
+            log_task_complete(state.task_id, state.current_iteration)
+            pending = state.context.get("pending_manual_checks") or []
+            console.print(
+                f"[task]Task code-complete — {len(pending)} criteria awaiting manual "
+                f"verification.[/task]"
+            )
+            self._hooks.trigger("loop_complete", state=state)
         elif state.current_phase == LoopPhase.FAILED:
             log_task_failed(state.task_id, state.error_message or "Unknown error")
             self._hooks.trigger("loop_failed", state=state)
@@ -1378,6 +1604,9 @@ class AgenticLoop:
                 ]
             )
         else:
+            stack = self._get_stack()
+            test_cmd = stack.test.command or "the project's test command"
+            contracts_key = "api_contracts" if is_v2_task(config.task_path) else "code_changes"
             parts.extend(
                 [
                     "## TDD Cycle",
@@ -1385,9 +1614,11 @@ class AgenticLoop:
                     "Task artifacts (user stories, code changes, test specs, plan phases) are bundled in "
                     "Static artifacts — use them directly, don't re-read the task folder.",
                     "",
-                    "1. **Interfaces** — from `artifacts.code_changes`, create Pydantic models and Protocol classes.",
-                    "2. **Tests (Red)** — from `artifacts.test_specs`, write pytest tests; expect them to fail.",
-                    "3. **Implementation (Green)** — make the tests pass, then run them to verify.",
+                    f"Use the project's {stack.language} conventions and test framework.",
+                    f"1. **Interfaces** — from `artifacts.{contracts_key}`, define the types/contracts.",
+                    "2. **Tests (Red)** — from `artifacts.test_specs`, write tests in the project's "
+                    "framework; expect them to fail.",
+                    f"3. **Implementation (Green)** — make the tests pass, then run `{test_cmd}` to verify.",
                 ]
             )
 
@@ -1407,7 +1638,20 @@ class AgenticLoop:
         ]
         if config.verification_scripts:
             parts.append(f"Run verification scripts: {config.verification_scripts}")
-        parts.append('Return JSON: {"dod_achieved": true/false, "fix_info": "..." if not achieved}')
+        if is_v2_task(config.task_path):
+            parts.extend(
+                [
+                    "For every acceptance criterion you verified, report the qualified AC id "
+                    "(e.g. US-001.AC-2) with the concrete runnable test identifiers that prove it.",
+                    'Return JSON: {"dod_achieved": true/false, "fix_info": "..." if not achieved, '
+                    '"ac_bindings": [{"ac": "US-001.AC-1", "tests": ["tests/test_x.py::test_y"], '
+                    '"passed": true}]}',
+                ]
+            )
+        else:
+            parts.append(
+                'Return JSON: {"dod_achieved": true/false, "fix_info": "..." if not achieved}'
+            )
         return "\n".join(parts)
 
     def _build_manager_prompt(
@@ -1435,6 +1679,10 @@ class AgenticLoop:
                 parts.append(f"  - ... and {len(files_touched) - 25} more")
             parts.append("")
 
+        if is_v2_task(config.task_path):
+            parts.extend(self._manager_instructions_v2(state))
+            return "\n".join(parts)
+
         parts.extend(
             [
                 "User stories and plan phases are bundled in `artifacts.user_stories` and "
@@ -1457,12 +1705,41 @@ class AgenticLoop:
 
         return "\n".join(parts)
 
+    @staticmethod
+    def _manager_instructions_v2(state: ExecutionState) -> list[str]:
+        """saha/v2 manager instructions: edit ONLY progress.yaml, evidence-backed."""
+        return [
+            "This is a saha/v2 task: `progress.yaml` is the ONLY file you may edit. "
+            "NEVER touch `model/*.c4` (frozen spec) and NEVER change the top-level "
+            "`status:` line (the orchestrator owns it).",
+            "",
+            "Using `iteration_artifacts` as evidence, Edit progress.yaml to:",
+            "- for each entry in `iteration_artifacts.qa_ac_bindings` with passed=true: set that "
+            "AC's `status: done` and merge its test identifiers into the AC's `tests:` list",
+            "- never tick an AC without a QA binding; ACs with `verify: manual` stay pending "
+            "(they end as human sign-off, not loop work)",
+            "- set a story's `status: done` only when ALL its acceptance criteria are done",
+            "- update phase `steps[].status` and phase `status` for work actually completed",
+            f"- append one record to `iterations:` — {{iteration: {state.current_iteration}, "
+            "phase: <current phase id>, result: passed|failed, notes: <one line>, "
+            "files_changed: [...]}",
+            "",
+            "If `iteration_stop.stopped_at_phase` is set, this iteration ended early — record "
+            "conservatively. When unsure, leave statuses as they are.",
+            "",
+            "Return JSON: ",
+            '{"status":"success","updates_made":[{"file":"progress.yaml","change":"...","verified":true}],'
+            '"items_completed":["..."],"items_remaining":["..."],"failed_updates":[],"notes":"..."}',
+        ]
+
     def _build_dod_prompt(
         self,
         state: ExecutionState,
         config: LoopConfig,
     ) -> str:
         """Build the prompt for the DoD agent."""
+        if is_v2_task(config.task_path):
+            return self._build_dod_prompt_v2(state, config)
         parts = [
             f"Verify if task is COMPLETE: {config.task_id} (iterations completed: {state.current_iteration}).",
             "",
@@ -1478,6 +1755,32 @@ class AgenticLoop:
             "stubbed files listed in `truncation_notes`.",
             "",
             'Return JSON: {"task_complete": true/false, "remaining_items": [...], "reasoning": "..."}',
+        ]
+        return "\n".join(parts)
+
+    @staticmethod
+    def _build_dod_prompt_v2(state: ExecutionState, config: LoopConfig) -> str:
+        """saha/v2 DoD prompt: completion is judged from progress.yaml ground truth."""
+        parts = [
+            f"Verify if task is COMPLETE: {config.task_id} "
+            f"(iterations completed: {state.current_iteration}).",
+            "",
+            "This is a saha/v2 task — the source of truth is `progress.yaml` "
+            "(bundled in Static artifacts; full bodies for the DoD view).",
+            "",
+            "Task is COMPLETE only if:",
+            "- ALL stories have status 'done'",
+            "- ALL acceptance criteria with verify 'automated' or 'build' have status 'done', "
+            "and every 'automated' AC has at least one entry in its `tests:` list",
+            "- ALL phases have status 'done'",
+            "",
+            "ACs with `verify: manual` are NOT blocking — they are deferred to human sign-off; "
+            "report them under `manual_checks` instead of `remaining_items`.",
+            "Distrust self-reported statuses that conflict with evidence: an AC marked done "
+            "with an empty `tests:` list (verify: automated) means the task is NOT complete.",
+            "",
+            'Return JSON: {"task_complete": true/false, "remaining_items": [...], '
+            '"manual_checks": [{"criterion": "...", "instructions": "..."}], "reasoning": "..."}',
         ]
         return "\n".join(parts)
 

@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from saha.config.stack import StackProfile
 from saha.orchestrator.artifact_bundler import ArtifactView
 from saha.orchestrator.loop import AgenticLoop, LoopConfig
 from saha.runners.claude import ClaudeRunner
@@ -42,13 +43,16 @@ def task_with_one_active_story(tmp_path: Path) -> Path:
 
 
 def _make_loop() -> AgenticLoop:
-    return AgenticLoop(
+    loop = AgenticLoop(
         runner=Mock(),
         tool_registry=Mock(),
         hook_registry=Mock(),
         state_manager=Mock(),
         settings=Mock(),
     )
+    # Mock settings has no real state_dir; seed the lazy stack cache directly.
+    loop._stack = StackProfile()
+    return loop
 
 
 def test_base_context_bundles_artifacts(task_with_one_active_story: Path) -> None:

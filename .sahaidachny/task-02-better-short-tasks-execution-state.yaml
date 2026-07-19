@@ -1,0 +1,76 @@
+task_id: task-02-better-short-tasks
+task_path: docs/tasks/task-02-better-short-tasks
+current_phase: completed
+current_iteration: 2
+max_iterations: 20
+started_at: 2026-06-15T20:56:11Z
+completed_at: 2026-06-16T04:55:19Z
+error_message: null
+iterations:
+  - iteration: 1
+    started_at: 2026-06-15T20:56:11Z
+    steps:
+      - phase: implementation
+        status: completed
+        output_summary: "Added plan-only /saha:quick single-pass command (light scan, collapsed [ ]/**Status:** artifacts, hands off to /saha:execute, no planning_reviewer), mirrored across claude/.codex/.gemini/.claude; removed --mode=minimal end-to-end (init_task.sh, help.sh, saha.md, init/status/contracts/decide/verify docs, SKILL.md incl phantom DoD step, user-guide.md). 201 tests pass; mirrors byte-identical; bash -n clean."
+      - phase: test_critique
+        status: completed
+        output_summary: "Score A. All US-001..004 ACs verified by inspection; quick.md mirrored byte-identically; no residual --mode=minimal/minimal-mode/phantom-DoD refs; collapsed artifacts use [ ] + **Status:**. Existing test_plugin_sync.py guards mirror byte-identity (201 tests pass). 0 hollow tests."
+      - phase: qa
+        status: completed
+        output_summary: "dod_achieved=true. 15/15 AC checks pass: quick.md plan-only + mirrored byte-identical; init_task.sh rejects --mode; zero residual minimal-mode/phantom-DoD refs in production files; user-guide separates scope vs context axes; bash -n clean; 201/201 tests pass."
+      - phase: code_quality
+        status: completed
+        output_summary: "quality_passed=true. 0 blocking issues. Shell mirrors bash -n clean; only Python touch (removed stale type:ignore in artifact_bundler.py) is ruff-clean; 3 pre-existing ty unused-ignore warnings outside changed range ignored. shellcheck not installed (advisory)."
+      - phase: manager
+        status: completed
+        output_summary: "US-001, US-002, US-004 -> Done (all ACs [x]). US-003 -> In Progress (AC-1/2/4 checked; AC-3 left unchecked: live E2E /saha:quick->/saha:execute demo not run). phase-01 status updated. Remaining: US-003 AC-3 live end-to-end demonstration."
+      - phase: dod_check
+        status: completed
+        output_summary: "task_complete=false. 15/16 ACs done; 3/4 stories Done; US-003 In Progress. Remaining: US-003 AC-3 (live quick->execute E2E demonstration on a representative small task with passing QA+ruff/ty/complexity)."
+    test_critique_passed: true
+    dod_achieved: true
+    quality_passed: true
+    fix_info: null
+    files_changed:
+      - claude_plugin/scripts/init_task.sh
+      - claude_plugin/scripts/help.sh
+      - claude_plugin/commands/saha.md
+      - claude_plugin/commands/init.md
+      - claude_plugin/commands/status.md
+      - claude_plugin/commands/contracts.md
+      - claude_plugin/commands/decide.md
+      - claude_plugin/commands/verify.md
+      - claude_plugin/skills/task-structure/SKILL.md
+      - docs/user-guide.md
+      - ".codex/ + .gemini/ + .claude/ mirrors of the above"
+    files_added:
+      - claude_plugin/commands/quick.md
+      - .codex/commands/quick.md
+      - .gemini/commands/quick.md
+      - .claude/commands/saha:quick.md
+      - docs/tasks/task-02-better-short-tasks/implementation-plan/phase-01.md
+  - iteration: 2
+    started_at: 2026-06-16T00:00:00Z
+    goal: "Satisfy US-003 AC-3 via a live /saha:quick -> /saha:execute demo on a real small task (task-03: prune stale type:ignore comments in artifact_bundler.py). Demo runs its own full verify loop; task-02 manager+dod then close US-003."
+    steps:
+      - phase: implementation
+        status: completed
+        output_summary: "LIVE AC-3 DEMO. Followed quick.md as /saha:quick: init_task.sh scaffolded task-03 (auto folder + current-task set) -> wrote collapsed grounded artifacts (task-description + US-001 w/ [ ] ACs + phase-01) -> stopped. Then ran /saha:execute on task-03 through the FULL unchanged loop: implementer removed 3 stale type:ignore in artifact_bundler.py; test-critique=A; QA dod=true (5/5 ACs, ty 'All checks passed!', ruff clean, 28+full 201 tests pass); code-quality clean (ruff/ty/complexipy, 0 blocking); manager closed US-001/phase-01; demo DoD task_complete=true. Quick->execute end-to-end completed with passing QA + ruff/ty/complexity."
+    test_critique_passed: true
+    dod_achieved: false
+    quality_passed: true
+    fix_info: null
+    files_changed:
+      - saha/orchestrator/artifact_bundler.py
+    files_added:
+      - docs/tasks/task-03-prune-stale-type-ignores/ (demo task: task-description.md, user-stories/US-001.md, implementation-plan/phase-01.md + scaffold)
+    dod_check:
+      phase: dod_check
+      status: completed
+      output_summary: "task_complete=true. All 4 user stories Done; 14/14 ACs [x]; phase-01 Complete. US-003 AC-3 verified by live quick->execute demo."
+context:
+  current_plan_phase: phase-01
+  fix_info: null
+  demo_task: task-03-prune-stale-type-ignores
+last_agent_output: null

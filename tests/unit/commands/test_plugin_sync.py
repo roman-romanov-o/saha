@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from saha.commands import plugin as plugin_module
-from saha.commands.plugin import sync_artifacts
+from saha.commands.plugin import _get_command_target_name, sync_artifacts
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _create_plugin_tree(base: Path) -> Path:
@@ -24,6 +26,18 @@ def _create_plugin_tree(base: Path) -> Path:
     (plugin / "scripts" / "init.sh").write_text("#!/usr/bin/env bash\necho init\n")
     (plugin / "settings.json").write_text("{}")
     return plugin
+
+
+@pytest.mark.parametrize("subdir", ["commands", "agents"])
+def test_repo_claude_dir_is_in_sync_with_claude_plugin(subdir: str) -> None:
+    """Every committed claude_plugin file must be byte-identical to its .claude copy."""
+    plugin_files = sorted((REPO_ROOT / "claude_plugin" / subdir).glob("*.md"))
+    assert plugin_files, f"no files found in claude_plugin/{subdir}"
+    for src in plugin_files:
+        name = _get_command_target_name(src.name) if subdir == "commands" else src.name
+        dst = REPO_ROOT / ".claude" / subdir / name
+        assert dst.exists(), f"{dst} missing — run `saha sync`"
+        assert dst.read_bytes() == src.read_bytes(), f"{dst} differs from {src} — run `saha sync`"
 
 
 def test_sync_all_targets_creates_expected_layout(tmp_path: Path) -> None:

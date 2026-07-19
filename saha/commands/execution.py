@@ -24,13 +24,16 @@ from saha.commands.common import setup_logging
 from saha.commands.plugin import sync_claude_artifacts
 from saha.config.settings import Settings
 from saha.context import clear_current_task, get_current_task, resolve_task_id, set_current_task
+from saha.models.progress import is_v2_task
 from saha.models.state import ExecutionState, LoopPhase
 from saha.orchestrator.factory import create_orchestrator
 from saha.orchestrator.loop import LoopConfig
 from saha.orchestrator.state import StateManager
+from saha.orchestrator.v2_progress import set_task_status
 from saha.tools.registry import create_default_registry
 from saha.verification import (
     TaskVerifier,
+    V2TaskVerifier,
     VerificationResult,
     VerificationStatus,
     cleanup_template_artifacts,
@@ -292,8 +295,31 @@ def _run_command(
         playwright_enabled=playwright,
     )
 
+    if is_v2_task(resolved_path):
+        set_task_status(resolved_path, "executing")
+
     state = orchestrator.run(config)
+    _sync_v2_task_status(resolved_path, state)
     _display_run_result(state)
+
+
+# Terminal loop phases → the v2 progress.yaml top-level status they map to.
+# STOPPED is deliberately absent: a stopped task stays "executing" so it reads
+# as resumable rather than finished.
+_V2_FINAL_STATUS = {
+    LoopPhase.COMPLETED: "completed",
+    LoopPhase.COMPLETED_PENDING_MANUAL: "completed_pending_manual",
+    LoopPhase.FAILED: "failed",
+}
+
+
+def _sync_v2_task_status(task_path: Path, state: ExecutionState) -> None:
+    """Mirror the loop's terminal phase into a v2 task's progress.yaml status line."""
+    if not is_v2_task(task_path):
+        return
+    new_status = _V2_FINAL_STATUS.get(state.current_phase)
+    if new_status and set_task_status(task_path, new_status):
+        typer.echo(f"progress.yaml status → {new_status}")
 
 
 def _build_run_settings(
@@ -382,7 +408,8 @@ def _run_verification(task_id: str, task_path: Path) -> VerificationResult:
     """Run verification checks and display results."""
     typer.echo("Verifying task artifacts...")
 
-    verifier = TaskVerifier(task_path)
+    verifier_cls = V2TaskVerifier if is_v2_task(task_path) else TaskVerifier
+    verifier = verifier_cls(task_path)
     result = verifier.verify(task_id)
 
     _display_verification_result(result)
@@ -430,6 +457,7 @@ def _resume_command(task_id: str, verbose: bool) -> None:
 
     try:
         state = orchestrator.resume(task_id)
+        _sync_v2_task_status(state.task_path, state)
         typer.echo(f"\nLoop finished. Final phase: {state.current_phase.value}")
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)

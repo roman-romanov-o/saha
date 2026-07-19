@@ -126,6 +126,17 @@ class StateManager:
         state.completed_at = datetime.now()
         self.save(state)
 
+    def mark_completed_pending_manual(self, state: ExecutionState) -> None:
+        """Mark execution code-complete with manual checks awaiting sign-off.
+
+        A success terminal state: all automated/build criteria pass, but one or
+        more ``verify:manual`` criteria still need a human. The accumulated
+        checks live in ``state.context['pending_manual_checks']``.
+        """
+        state.current_phase = LoopPhase.COMPLETED_PENDING_MANUAL
+        state.completed_at = datetime.now()
+        self.save(state)
+
     def mark_failed(self, state: ExecutionState, error: str) -> None:
         """Mark the entire execution as failed."""
         state.current_phase = LoopPhase.FAILED

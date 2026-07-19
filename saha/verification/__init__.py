@@ -7,11 +7,15 @@ from saha.verification.checker import (
     VerificationStatus,
     cleanup_template_artifacts,
 )
+from saha.verification.fingerprint import compute_model_fingerprint
+from saha.verification.v2_checker import V2TaskVerifier
 
 __all__ = [
     "CleanupResult",
     "TaskVerifier",
+    "V2TaskVerifier",
     "VerificationResult",
     "VerificationStatus",
     "cleanup_template_artifacts",
+    "compute_model_fingerprint",
 ]

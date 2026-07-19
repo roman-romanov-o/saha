@@ -1,11 +1,11 @@
 """Base hook interface and event definitions."""
 
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class HookEvent(str, Enum):
+class HookEvent(StrEnum):
     """Events that can trigger hooks."""
 
     # Loop lifecycle

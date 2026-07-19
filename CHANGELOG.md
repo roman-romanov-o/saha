@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-19
+
+### Added
+- **saha/v2 planning — LikeC4 diagrams + a single `progress.yaml`**: planning artifacts are now a frozen LikeC4 model (`model/*.c4`: spec, task-context, stories as dynamic flow views, decisions, contracts, test-specs, phases) reviewed as diagrams, plus one machine-readable `progress.yaml` (marked `format: saha/v2`) as the *only* mutable tracking file. `/saha:init` scaffolds `model/` + `progress.yaml`; `task`/`stories`/`decide`/`contracts`/`test-specs`/`plan` write `.c4` views and seed `progress.yaml` records; `status`/`resume`/`execute` read `progress.yaml`; `/saha:verify` gates on `likec4 validate` plus YAML cross-reference checks. The `task-structure` skill is rewritten as the saha/v2 reference and legacy markdown templates are removed.
+- **saha/v2 execution engine**: `is_v2_task()` (the `format: saha/v2` marker) branches the loop onto v2 tasks. `V2ArtifactBundler` maps `model/*.c4` + `progress.yaml` into the existing `TaskArtifacts` shape, so every `execution-*` subagent and view policy is inherited unchanged. `V2ProgressUpdater` / `set_task_status` do surgical status writes that preserve comments and unmodeled keys. A frozen-spec fingerprint of `model/*.c4` is seeded at kickoff and re-checked before DoD completion, so any mid-run spec edit blocks completion. QA reports `{ac, tests, passed}` and only the manager writes AC→test bindings into `progress.yaml` (never self-certified). `V2TaskVerifier` uses `likec4 validate` as the compile gate.
+- **Story cards link to their flows** via `navigateTo`: static views attach `include us-NNN with { navigateTo us-NNN-flow }` so clicking a story card jumps into its dynamic flow; enforced across templates, `/saha:stories`, `/saha:plan`, `/saha:verify`, and the planning reviewer.
+- **E2E-per-story verify gate + mocked-vs-real declarations**: each `ts-*` view declares **Real:** / **Mocked:** components; `/saha:verify` fails a story that has no happy-path `ts-e2e-*` view (unless excused by `test_specs.gaps`) and fails an E2E view that mocks the system under test.
+- **Language-agnostic stack profiles**: `saha/config/stack.py` resolves the toolchain from `.sahaidachny/stack.yaml` or glob-aware marker files (e.g. `*.xcodeproj` → Swift). The resolved profile — build/test/quality/run commands — is forwarded in every phase's context so agents stop re-deriving it. Adds `docs/stack-profiles.md` and an example Swift profile; honors `stack.yaml` `test.command` overrides.
+- **Multi-runner artifact sync**: `saha sync` now generates `.codex/` and `.gemini/` runner artifact dirs alongside `.claude/`, guarded by a byte-equality sync test.
+
+### Changed
+- Plugin bumped to `0.5.0` to surface the saha/v2 planning commands.
+
+### Fixed
+- Converted the codebase's `class X(str, Enum)` declarations to `StrEnum` and added the missing type annotations in the artifact bundlers; `ruff check`, `ruff format --check`, and `mypy` are all clean.
+
+## [0.10.0] - 2026-06-16
+
+### Added
+- **`/saha:quick "<task>"` lightweight planning**: a single inline pass that does a light, targeted codebase scan and writes the *minimum* artifact set the execution loop needs — a short `task-description.md`, one `user-stories/US-001.md` whose acceptance criteria are the Definition of Done, and one `implementation-plan/phase-01.md` — then hands off to `/saha:execute`. It is plan-only (no code, no execution) and runs **no** `planning_reviewer` gate, collapsing the full `init → task → research → stories → verify → plan` chain for small (1–2 file) changes while keeping the execution verify loop intact.
+  - Mirrored across `claude_plugin/` and the `.claude` runner; plugin bumped to `0.4.0` to surface the new command in `/saha:` help.
+- Docs: a short-task quick start (`/saha:quick` → `/saha:execute`) and a "Planning Paths" section that separates **scope** (small vs large) from **context** (greenfield vs existing).
+
+### Removed
+- **`--mode=minimal`** end-to-end: removed from `init_task.sh`, `help.sh`, the `saha`/`init`/`status`/`contracts`/`decide`/`verify` command docs, the `task-structure` skill (including the phantom "Definition of Done" planning step that mapped to no command), and the user guide. Existing task folders scaffolded under the old mode continue to work with the execution loop. The unrelated `verify --mode=manual|playwright|script|test` method flag is unchanged.
+
+### Fixed
+- Pruned three stale `# type: ignore[no-untyped-def]` comments in `artifact_bundler.py` that `ty` flagged as unused.
+
 ## [0.9.0] - 2026-05-26
 
 ### Added
