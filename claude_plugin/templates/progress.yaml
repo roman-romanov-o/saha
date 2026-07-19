@@ -39,11 +39,40 @@ planning:
 # ── User stories ────────────────────────────────────────────────────────────
 # The authoritative story/AC records. The .c4 dynamic view is the human-review
 # rendering of the SAME story; ids must match (story id us-001 <-> view us-001-flow).
+#
+# ── AC-QUALITY CONTRACT (read before writing acceptance_criteria) ─────────────
+# An AC states an OBSERVABLE OUTCOME — what a caller, user, or another component
+# can see happen. It is the behavioural contract a test will later prove; it is
+# NOT the test and NOT the design.
+#   - DO NOT name an implementation mechanism in AC `text`: no specific API,
+#     library, or internal function/trigger (e.g. "arrayUnion", "esbuild",
+#     "onOpenMatchWritten", "read-modify-write", a *.ts filename). The mechanism
+#     is a DESIGN DECISION — put it in a DD and cite that DD via `decisions:`.
+#   - DO NOT put test mechanics in AC `text`: mocks, fixtures, harness, "green
+#     test". Those belong in the test-specs (see model/test-specs.c4 Real/Mocked).
+#   - DO describe the effect the mechanism must achieve. Rule of thumb: if the AC
+#     would have to change when you swap the library or refactor an internal, it
+#     names an implementation — rewrite it as the outcome and move the "how" to a DD.
+#   - If an AC names a mechanism, it MUST cite the DD that owns it in `decisions:`.
+#     An AC that names a mechanism with `decisions: []` is a leak — create the DD.
+#   Leak:  "…caller is added to playerIds via transactional read-modify-write (not arrayUnion)."
+#   Clean: "…caller joins the match and the 4-seat cap is never exceeded under a race (mechanism: DD-006)."
+# /saha:verify greps AC text for these tells; keep it clean at authoring time.
+#
+# ── PERSONA / ENABLER RULE ────────────────────────────────────────────────────
+# A story's `role` should be an END USER or business actor whose value the `so that`
+# names. A `role` of "developer", "backend developer", or "system" is an ENABLER,
+# not a user story — allowed, but then:
+#   - set `kind: enabler` on the story, AND
+#   - the `so that` must name the downstream USER-FACING capability it unlocks
+#     (e.g. "…so that players can create and join matches"), not just "so that the
+#     code builds". If you cannot name downstream user value, it is a task, not a story.
 stories:
   - id: US-001
     title: "{{story_title}}"
     view: us-001-flow          # dynamic view id in model/stories.c4
     priority: must             # must | should | could
+    kind: story                # story | enabler (enabler = developer/system persona; see PERSONA rule above)
     status: draft              # draft | ready | in_progress | done
     story: "As a {{role}}, I want {{feature}} so that {{benefit}}."
     acceptance_criteria:

@@ -122,6 +122,38 @@ Inconsistencies Found:
 - Test scenario Expected notes are implementable without ambiguity
 - Phase steps have `files` lists
 
+### 5b. AC-Quality Lint (mechanism & persona leaks)
+
+Enforce the **AC-QUALITY CONTRACT** and **PERSONA / ENABLER RULE** declared in
+`progress.yaml`'s header. An acceptance criterion states an OBSERVABLE OUTCOME —
+not an implementation mechanism (a library/API/internal-fn/`*.ts`/trigger name)
+and not test mechanics (mocks, fixtures). The "how" belongs in a DD; the test
+detail belongs in `model/test-specs.c4`.
+
+Run the heuristic scan, then apply judgment (it flags candidates, not certainties):
+
+```bash
+PROG="{task_path}/progress.yaml"
+# 1) Implementation / test-mechanic tells inside AC `text:` lines.
+grep -nE '^\s*(- id:|text:)' "$PROG" \
+ | grep -iE 'arrayUnion|arrayRemove|esbuild|webpack|read-modify-write|getFirestore|collection\(|\.ts\b|on[A-Z][A-Za-z]+(Written|Created|Updated|Deleted)|httpsCallable|connectFunctionsEmulator|mock|stub|fixture|harness|green test' \
+ && echo "AC text names a mechanism or test detail — rewrite as an outcome, move the 'how' to a DD."
+# 2) Enabler personas that aren't tagged as such.
+grep -nE 'story:\s*"As a (backend |frontend )?(developer|dev|system|engineer)' "$PROG" \
+ && echo "Developer/system persona — set kind: enabler and have 'so that' name the downstream USER value."
+```
+
+Report each hit as a warning. Two checks elevate to hard failures (blockers before execution):
+
+- **Mechanism-without-DD leak:** an AC whose `text` names a mechanism (list above)
+  while its story's `decisions:` is `[]`. The decision has no home — the DD phase
+  must own it. Cross-check the flagged story's `decisions:` field.
+- **Untagged enabler:** a `developer`/`system` persona story whose `kind:` is not
+  `enabler`, or whose `so that` names no downstream user-facing capability.
+
+Reword AC hits to the observable outcome and cite the owning DD; do not just delete
+the detail. If a mechanism has no DD yet, that is a real gap — flag it for `/saha:decide`.
+
 ### 6. Project Architecture Model (optional)
 
 Only when `docs/architecture/` exists (skip silently otherwise):
