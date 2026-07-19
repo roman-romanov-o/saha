@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-19
+
+### Added
+- **saha/v2 planning — LikeC4 diagrams + a single `progress.yaml`**: planning artifacts are now a frozen LikeC4 model (`model/*.c4`: spec, task-context, stories as dynamic flow views, decisions, contracts, test-specs, phases) reviewed as diagrams, plus one machine-readable `progress.yaml` (marked `format: saha/v2`) as the *only* mutable tracking file. `/saha:init` scaffolds `model/` + `progress.yaml`; `task`/`stories`/`decide`/`contracts`/`test-specs`/`plan` write `.c4` views and seed `progress.yaml` records; `status`/`resume`/`execute` read `progress.yaml`; `/saha:verify` gates on `likec4 validate` plus YAML cross-reference checks. The `task-structure` skill is rewritten as the saha/v2 reference and legacy markdown templates are removed.
+- **saha/v2 execution engine**: `is_v2_task()` (the `format: saha/v2` marker) branches the loop onto v2 tasks. `V2ArtifactBundler` maps `model/*.c4` + `progress.yaml` into the existing `TaskArtifacts` shape, so every `execution-*` subagent and view policy is inherited unchanged. `V2ProgressUpdater` / `set_task_status` do surgical status writes that preserve comments and unmodeled keys. A frozen-spec fingerprint of `model/*.c4` is seeded at kickoff and re-checked before DoD completion, so any mid-run spec edit blocks completion. QA reports `{ac, tests, passed}` and only the manager writes AC→test bindings into `progress.yaml` (never self-certified). `V2TaskVerifier` uses `likec4 validate` as the compile gate.
+- **Story cards link to their flows** via `navigateTo`: static views attach `include us-NNN with { navigateTo us-NNN-flow }` so clicking a story card jumps into its dynamic flow; enforced across templates, `/saha:stories`, `/saha:plan`, `/saha:verify`, and the planning reviewer.
+- **E2E-per-story verify gate + mocked-vs-real declarations**: each `ts-*` view declares **Real:** / **Mocked:** components; `/saha:verify` fails a story that has no happy-path `ts-e2e-*` view (unless excused by `test_specs.gaps`) and fails an E2E view that mocks the system under test.
+- **Language-agnostic stack profiles**: `saha/config/stack.py` resolves the toolchain from `.sahaidachny/stack.yaml` or glob-aware marker files (e.g. `*.xcodeproj` → Swift). The resolved profile — build/test/quality/run commands — is forwarded in every phase's context so agents stop re-deriving it. Adds `docs/stack-profiles.md` and an example Swift profile; honors `stack.yaml` `test.command` overrides.
+- **Multi-runner artifact sync**: `saha sync` now generates `.codex/` and `.gemini/` runner artifact dirs alongside `.claude/`, guarded by a byte-equality sync test.
+
+### Changed
+- Plugin bumped to `0.5.0` to surface the saha/v2 planning commands.
+
+### Fixed
+- Converted the codebase's `class X(str, Enum)` declarations to `StrEnum` and added the missing type annotations in the artifact bundlers; `ruff check`, `ruff format --check`, and `mypy` are all clean.
+
 ## [0.10.0] - 2026-06-16
 
 ### Added

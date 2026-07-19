@@ -27,10 +27,10 @@ from pathlib import Path
 
 from saha.models.likec4_source import read_model_sources, view_ids
 from saha.models.progress import (
+    V2_FORMAT_VALUE,
     ProgressFile,
     ProgressFileError,
     StoryProgress,
-    V2_FORMAT_VALUE,
     load_progress,
     progress_yaml_path,
 )
@@ -209,7 +209,10 @@ class V2TaskVerifier:
     def _check_template_placeholders(self, sources: dict[str, str]) -> None:
         offenders = [
             name
-            for name, text in {"progress.yaml": _read_progress_text(self.task_path), **sources}.items()
+            for name, text in {
+                "progress.yaml": _read_progress_text(self.task_path),
+                **sources,
+            }.items()
             if text and TEMPLATE_PLACEHOLDER_PATTERN.search(text)
         ]
         if offenders:
@@ -290,9 +293,7 @@ def _dependency_errors(progress: ProgressFile, story_ids: set[str]) -> list[str]
 
 
 def _has_e2e_spec(story: StoryProgress) -> bool:
-    return any(
-        spec.startswith("ts-e2e-") for ac in story.acceptance_criteria for spec in ac.specs
-    )
+    return any(spec.startswith("ts-e2e-") for ac in story.acceptance_criteria for spec in ac.specs)
 
 
 def _read_progress_text(task_path: Path) -> str:

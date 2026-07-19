@@ -10,7 +10,7 @@ Checks include:
 
 import logging
 import re
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -30,7 +30,7 @@ ACCEPTANCE_CRITERIA_SECTION = re.compile(
 )
 
 
-class VerificationStatus(str, Enum):
+class VerificationStatus(StrEnum):
     """Overall verification result status."""
 
     PASSED = "passed"

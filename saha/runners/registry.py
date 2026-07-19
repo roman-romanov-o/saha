@@ -5,14 +5,14 @@ allowing different agents to use different LLM providers (Claude, Codex, Gemini,
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from saha.runners.base import Runner, RunnerResult
 
 
-class RunnerType(str, Enum):
+class RunnerType(StrEnum):
     """Available runner types."""
 
     CLAUDE = "claude"

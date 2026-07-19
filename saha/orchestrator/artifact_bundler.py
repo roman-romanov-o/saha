@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -171,6 +171,7 @@ class TaskArtifacts(BaseModel):
 
 
 _StatusMode = Literal["full", "stub", "skip"]
+_StatusItem = TypeVar("_StatusItem", Story, TestSpec, CodeChange, PlanPhase)
 
 
 @dataclass(frozen=True)
@@ -522,7 +523,7 @@ class ArtifactBundler:
         )
 
         # Stub items in priority order: lowest-importance slices first.
-        candidate_slices = [
+        candidate_slices: list[tuple[str, list[Any] | dict[str, str]]] = [
             ("design_decisions", artifacts.design_decisions),
             ("api_contracts", artifacts.api_contracts),
             ("implementation_plan", artifacts.implementation_plan),
@@ -569,7 +570,9 @@ def _safe_read_text(path: Path) -> str:
         return ""
 
 
-def _apply_status_policy(items, policy):
+def _apply_status_policy(
+    items: list[_StatusItem], policy: dict[LifecycleStatus, _StatusMode]
+) -> list[_StatusItem]:
     out = []
     for item in items:
         mode = policy.get(item.status, "full")
@@ -586,7 +589,7 @@ def _estimate_size_bytes(artifacts: TaskArtifacts) -> int:
     return len(artifacts.model_dump_json(exclude_none=True).encode("utf-8"))
 
 
-def _stub_largest(items) -> str | None:
+def _stub_largest(items: list[Any] | dict[str, str]) -> str | None:
     """Mutate `items` in place: stub the entry with the largest body. Return its label, or None if nothing stubbable remains."""
     if isinstance(items, dict):
         return _stub_largest_dict(items)
@@ -602,7 +605,7 @@ def _stub_largest_dict(items: dict[str, str]) -> str | None:
     return key
 
 
-def _stub_largest_list(items) -> str | None:
+def _stub_largest_list(items: list[Any]) -> str | None:
     largest_idx: int | None = None
     largest_size = -1
     for idx, item in enumerate(items):

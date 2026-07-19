@@ -1,13 +1,13 @@
 """Result models for subagents and tools."""
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ResultStatus(str, Enum):
+class ResultStatus(StrEnum):
     """Status of a result."""
 
     SUCCESS = "success"

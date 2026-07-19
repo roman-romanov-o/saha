@@ -4,7 +4,7 @@ These schemas define the expected JSON output from each execution agent.
 Used by the orchestrator to validate agent responses.
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from saha.models.result import ManualCheck
 
 
-class ImplementationStatus(str, Enum):
+class ImplementationStatus(StrEnum):
     """Status codes for implementation agent."""
 
     SUCCESS = "success"
@@ -116,7 +116,7 @@ class QAPlaywrightOutput(QAOutput):
     )
 
 
-class ManagerStatus(str, Enum):
+class ManagerStatus(StrEnum):
     """Status codes for manager agent."""
 
     SUCCESS = "success"
@@ -156,7 +156,7 @@ class ManagerOutput(BaseModel):
     notes: str | None = Field(default=None, description="Observations about progress or issues")
 
 
-class DoDConfidence(str, Enum):
+class DoDConfidence(StrEnum):
     """Confidence levels for DoD determination."""
 
     HIGH = "high"
@@ -240,7 +240,7 @@ class CodeQualityOutput(BaseModel):
     )
 
 
-class TestQualityScore(str, Enum):
+class TestQualityScore(StrEnum):
     """Test quality grades."""
 
     A = "A"

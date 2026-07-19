@@ -639,8 +639,7 @@ class AgenticLoop:
         """Print the human verification checklist for deferred manual checks."""
         console.print("\n[task]── MANUAL VERIFICATION REQUIRED ──[/task]")
         console.print(
-            "[task]Code is complete. The following acceptance criteria need "
-            "human sign-off:[/task]"
+            "[task]Code is complete. The following acceptance criteria need human sign-off:[/task]"
         )
         for entry in pending:
             console.print(f"  [ ] {entry['criterion']}")
@@ -1271,9 +1270,7 @@ class AgenticLoop:
             parts.extend(f"  - {c}" for c in commands)
         else:
             parts.append("")
-            parts.append(
-                "No quality commands configured for this stack — skip linting and pass."
-            )
+            parts.append("No quality commands configured for this stack — skip linting and pass.")
         parts.extend(
             [
                 "Filter false positives and pre-existing issues. "

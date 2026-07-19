@@ -200,7 +200,7 @@ def _mutate_progress(task_path: Path, old: str, new: str) -> None:
         ("view: us-001-flow", "view: us-999-missing", "view references"),
         ("verify: automated", "verify: vibes", "AC verify methods"),
         (
-            "manual_instructions: \"Open the app and eyeball the widget\"\n        ",
+            'manual_instructions: "Open the app and eyeball the widget"\n        ',
             "",
             "AC verify methods",
         ),
@@ -328,11 +328,12 @@ def test_set_task_status_patches_only_the_top_level_line(v2_task):
     assert "status: executing  # set by the orchestrator" in after
     # Everything except the one patched line is byte-identical (comments,
     # AC-level `status:` lines, indentation all preserved).
-    diff = [
-        (a, b) for a, b in zip(before.splitlines(), after.splitlines(), strict=True) if a != b
-    ]
+    diff = [(a, b) for a, b in zip(before.splitlines(), after.splitlines(), strict=True) if a != b]
     assert diff == [
-        ("status: planning  # set by the orchestrator", "status: executing  # set by the orchestrator")
+        (
+            "status: planning  # set by the orchestrator",
+            "status: executing  # set by the orchestrator",
+        )
     ]
     assert load_progress(v2_task).status == "executing"
 

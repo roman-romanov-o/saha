@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Literal
 
 from saha.models.likec4_source import extract_view_block, read_model_sources
 from saha.models.progress import (
@@ -43,7 +44,7 @@ from saha.orchestrator.artifact_bundler import (
 
 logger = logging.getLogger(__name__)
 
-_SPEC_TYPE_PREFIXES = {
+_SPEC_TYPE_PREFIXES: dict[str, Literal["e2e", "integration", "unit"]] = {
     "ts-e2e": "e2e",
     "ts-int": "integration",
     "ts-unit": "unit",
@@ -116,8 +117,7 @@ def _render_story_body(story: StoryProgress, sources: dict[str, str]) -> str:
         lines.append("")
         lines.append("### Edge cases")
         lines.extend(
-            f"- {ec.name}: {ec.trigger} → {ec.expected}".rstrip(": →")
-            for ec in story.edge_cases
+            f"- {ec.name}: {ec.trigger} → {ec.expected}".rstrip(": →") for ec in story.edge_cases
         )
     if story.depends_on:
         lines.append(f"\nDepends on: {', '.join(story.depends_on)}")
@@ -179,7 +179,7 @@ def _find_view_block(sources: dict[str, str], view_id: str) -> str | None:
     return None
 
 
-def _spec_type(spec_id: str) -> str:
+def _spec_type(spec_id: str) -> Literal["e2e", "integration", "unit"]:
     for prefix, test_type in _SPEC_TYPE_PREFIXES.items():
         if spec_id.startswith(prefix):
             return test_type
